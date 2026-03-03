@@ -17,6 +17,8 @@ GameObject:
   - component: {fileID: 1406825224556498402}
   - component: {fileID: 233874330043176101}
   - component: {fileID: 8001515027711334232}
+  - component: {fileID: 1800317028136500363}
+  - component: {fileID: 3778021839393251362}
   m_Layer: 0
   m_Name: NetPlayer
   m_TagString: Untagged
@@ -256,3 +258,49 @@ MonoBehaviour:
   syncDirection: 0
   syncMode: 0
   syncInterval: 0
+--- !u!114 &1800317028136500363
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 425909620146465828}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 35a448595685cb54799cd7ac9225358e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncMethod: 0
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  hp: 0
+  maxHp: 100
+  attack: 10
+  defense: 5
+  level: 1
+  currentExp: 0
+  expToNextLevel: 100
+--- !u!114 &3778021839393251362
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 425909620146465828}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0665191fa8845d2429ab145d51500a77, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncMethod: 0
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  attackKey: 106
+  attackRange: 1
+  attackRadius: 0.6
+  targetLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  attackCooldown: 0.3
