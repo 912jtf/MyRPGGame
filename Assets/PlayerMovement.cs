@@ -7,6 +7,9 @@ public class PlayerMovement : MonoBehaviour
     [Header("移动速度")]
     public float speed = 5f;   // 在 Inspector 中调整玩家移动速度
 
+    [Tooltip("小于此值的输入视为 0，避免摇杆/键盘漂移导致偶发单向移动")]
+    public float inputDeadZone = 0.2f;
+
     private Rigidbody2D rb;
     private Animator animator;
     private SpriteRenderer spriteRenderer;
@@ -28,9 +31,11 @@ public class PlayerMovement : MonoBehaviour
             return;
         }
 
-        // 获取玩家输入（WASD / 方向键）
+        // 获取玩家输入（WASD / 方向键），加死区避免漂移
         float moveX = Input.GetAxisRaw("Horizontal");
         float moveY = Input.GetAxisRaw("Vertical");
+        if (Mathf.Abs(moveX) < inputDeadZone) moveX = 0f;
+        if (Mathf.Abs(moveY) < inputDeadZone) moveY = 0f;
 
         // 归一化，防止斜向移动更快
         moveInput = new Vector2(moveX, moveY).normalized;
@@ -38,12 +43,12 @@ public class PlayerMovement : MonoBehaviour
         // 左右方向时翻转角色朝向
         if (spriteRenderer != null)
         {
-            if (moveX > 0.01f)
+            if (moveX > inputDeadZone)
             {
                 // 朝右
                 spriteRenderer.flipX = false;
             }
-            else if (moveX < -0.01f)
+            else if (moveX < -inputDeadZone)
             {
                 // 朝左
                 spriteRenderer.flipX = true;
@@ -63,10 +68,21 @@ public class PlayerMovement : MonoBehaviour
 
     void FixedUpdate()
     {
-        // 使用刚体的 velocity 控制移动
-        if (rb != null)
-        {
+        if (rb == null) return;
+        if (moveInput.sqrMagnitude < 0.001f)
+            rb.velocity = Vector2.zero;
+        else
             rb.velocity = moveInput * speed;
+    }
+
+    void LateUpdate()
+    {
+        // 联机时己方无输入则再次清零速度，减少同步出去的位移漂移
+        if (rb == null) return;
+        if ((NetworkClient.active || NetworkServer.active) && GetComponent<NetworkIdentity>() != null && moveInput.sqrMagnitude < 0.001f)
+        {
+            rb.velocity = Vector2.zero;
+            rb.angularVelocity = 0f;
         }
     }
 }
