@@ -26,6 +26,32 @@ public class PlayerHealth : MonoBehaviour
             originalColor = spriteRenderer.color;
         }
 
+        // 如果在 Prefab 上没法手动拖引用，尝试在场景中自动寻找血条 Image
+        if (healthFillImage == null)
+        {
+            // 方案 1：优先通过 Tag 查找（如果你给血条物体加了 PlayerHealthBar 标签）
+            GameObject bar = null;
+            try
+            {
+                bar = GameObject.FindGameObjectWithTag("PlayerHealthBar");
+            }
+            catch
+            {
+                // 场景中没有这个 Tag 时会抛异常，忽略即可
+            }
+
+            // 方案 2：如果没找到，再通过名字查找一个叫 "HealthBar" 的物体
+            if (bar == null)
+            {
+                bar = GameObject.Find("HealthBar");
+            }
+
+            if (bar != null)
+            {
+                healthFillImage = bar.GetComponent<Image>();
+            }
+        }
+
         UpdateHealthUI();
     }
 
