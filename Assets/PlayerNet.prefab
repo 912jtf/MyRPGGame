@@ -18,6 +18,7 @@ GameObject:
   - component: {fileID: 83389432439665805}
   - component: {fileID: 3046166808100115955}
   - component: {fileID: -2671608762148338982}
+  - component: {fileID: -2825767138046934080}
   m_Layer: 7
   m_Name: PlayerNet
   m_TagString: Player
@@ -276,3 +277,19 @@ MonoBehaviour:
   rotationSensitivity: 0.01
   positionPrecision: 0.01
   scalePrecision: 0.01
+--- !u!114 &-2825767138046934080
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7989021357002233796}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 717301b5066dd7e478f81686f7a9e860, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  skills:
+  - {fileID: 11400000, guid: bb6bf953c6d3f30488c13297b21b005e, type: 2}
+  - {fileID: 11400000, guid: f594ce7ef1cb45242985d799a0f3cc6e, type: 2}
+  - {fileID: 11400000, guid: 2e54d7422c38b6343a49f005c0649cf8, type: 2}

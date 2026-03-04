@@ -98,5 +98,22 @@ public class PlayerHealth : MonoBehaviour
         // TODO: 播放死亡动画 / 复活逻辑等
         Debug.Log("Player died.");
     }
+
+    /// <summary>
+    /// 为玩家回复生命值，最多不超过 maxHealth。
+    /// </summary>
+    /// <param name="amount">回复量（正数有效）</param>
+    public void Heal(int amount)
+    {
+        if (amount <= 0) return;
+
+        currentHealth += amount;
+        if (currentHealth > maxHealth)
+        {
+            currentHealth = maxHealth;
+        }
+
+        UpdateHealthUI();
+    }
 }
 

@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 70940cd2d0205cb47a3ae2cf25314829, type: 3}
+  m_Name: HealSkill_L
+  m_EditorClassIdentifier: 
+  skillName: Heal
+  key: 108
+  cooldown: 5
+  healAmount: 1
+  healEffectPrefab: {fileID: 2769371326490797523, guid: 9ae7121a8cbe4d549b478e09f0af2705, type: 3}
+  effectOffset: {x: 0, y: 0, z: 0}
