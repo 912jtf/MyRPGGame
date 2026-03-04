@@ -19,6 +19,7 @@ GameObject:
   - component: {fileID: 3046166808100115955}
   - component: {fileID: -2671608762148338982}
   - component: {fileID: -2825767138046934080}
+  - component: {fileID: -8837610665301174244}
   m_Layer: 7
   m_Name: PlayerNet
   m_TagString: Player
@@ -221,7 +222,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 78b2980bb480cd34f963852dd89f346c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 100
+  maxHealth: 5
   healthFillImage: {fileID: 0}
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
@@ -293,3 +294,20 @@ MonoBehaviour:
   - {fileID: 11400000, guid: bb6bf953c6d3f30488c13297b21b005e, type: 2}
   - {fileID: 11400000, guid: f594ce7ef1cb45242985d799a0f3cc6e, type: 2}
   - {fileID: 11400000, guid: 2e54d7422c38b6343a49f005c0649cf8, type: 2}
+--- !u!114 &-8837610665301174244
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7989021357002233796}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6ebfaa452b07c6d448c74dbb3581e9e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  level: 1
+  currentExp: 0
+  maxLevel: 5
+  expFillImage: {fileID: 0}
+  levelText: {fileID: 0}
