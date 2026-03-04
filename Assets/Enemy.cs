@@ -280,7 +280,7 @@ public class Enemy : MonoBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        // 在 Scene 视图中显示敌人的攻击判定范围
+        // 在 Scene 视图中显示敌人的攻击判定范围 测试
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, attackRadius);
     }
