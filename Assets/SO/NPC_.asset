@@ -12,5 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 335d1c074b1cc6e4f922c9ca720e0686, type: 3}
   m_Name: NPC_
   m_EditorClassIdentifier: 
-  npcName: NPC1
+  npcName: Bombo
   portrait: {fileID: 21300000, guid: e89c5838fb472cf459e3e9fe3aab2cdd, type: 3}
