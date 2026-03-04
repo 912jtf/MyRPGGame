@@ -125,9 +125,10 @@ public class PlayerLevel : MonoBehaviour
     {
         level++;
 
-        // 回复 2 点生命值
+        // 提高 2 点生命值上限，同时增加 2 点当前生命值
         if (_playerHealth != null)
         {
+            _playerHealth.maxHealth += 2;
             _playerHealth.Heal(2);
         }
 

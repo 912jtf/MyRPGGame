@@ -19,6 +19,16 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("生成时与玩家的大致距离")]
     public float spawnDistance = 8f;
 
+    [Header("地图边界（可选）")]
+    [Tooltip("是否限制敌人生成在一个矩形边界内（例如你的地图范围）")]
+    public bool useBounds = false;
+
+    [Tooltip("地图左下角世界坐标")]
+    public Vector2 minPosition;
+
+    [Tooltip("地图右上角世界坐标")]
+    public Vector2 maxPosition;
+
     [Tooltip("同一时间场景中允许存在的敌人最大数量（0 或负数表示不限制）")]
     public int maxEnemies = 0;
 
@@ -39,7 +49,19 @@ public class EnemySpawner : MonoBehaviour
     private void Update()
     {
         if (enemyPrefab == null) return;
-        if (player == null) return;
+
+        // 联机模式下 PlayerNet 是在点击 Host / Client 后由 NetworkManager 动态生成的，
+        // 因此 Start 时场景里还没有 Tag=Player 的物体。
+        // 这里在每帧都尝试一次查找，直到找到为止。
+        if (player == null)
+        {
+            GameObject p = GameObject.FindGameObjectWithTag("Player");
+            if (p != null)
+            {
+                player = p.transform;
+            }
+            if (player == null) return;
+        }
 
         _timer += Time.deltaTime;
         if (_timer < spawnInterval) return;
@@ -86,16 +108,46 @@ public class EnemySpawner : MonoBehaviour
         float scatter = Random.Range(-2f, 2f);
         Vector2 finalPos = basePos + perpendicular * scatter;
 
+        // 如果开启了边界限制，把生成位置限制在矩形范围内
+        if (useBounds)
+        {
+            finalPos.x = Mathf.Clamp(finalPos.x, minPosition.x, maxPosition.x);
+            finalPos.y = Mathf.Clamp(finalPos.y, minPosition.y, maxPosition.y);
+        }
+
         Instantiate(enemyPrefab, finalPos, Quaternion.identity);
     }
 
     /// <summary>
-    /// 计算当前场景中存活的敌人数目（根据 EnemyHealth 组件统计）。
+    /// 计算当前场景中“靠近玩家”的敌人数目。
+    /// 说明：
+    /// - 若有些敌人被你风筝到很远的地方，但仍然存活，
+    ///   就不再把它们算进来，避免刷怪器以为数量已满而停止刷新。
     /// </summary>
     private int CountAliveEnemies()
     {
         EnemyHealth[] enemies = FindObjectsOfType<EnemyHealth>();
-        return enemies.Length;
+        if (player == null)
+        {
+            return enemies.Length;
+        }
+
+        int count = 0;
+        Vector3 playerPos = player.position;
+        float maxDistance = spawnDistance * 2f; // 只统计离玩家不太远的敌人
+        float maxSqr = maxDistance * maxDistance;
+
+        foreach (EnemyHealth e in enemies)
+        {
+            if (e == null) continue;
+            Vector3 pos = e.transform.position;
+            if ((pos - playerPos).sqrMagnitude <= maxSqr)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 }
 
