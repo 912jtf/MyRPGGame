@@ -10,6 +10,13 @@ public class DashSkillSO : SkillSO
     [Tooltip("冲刺持续时间（秒），0 表示瞬移")]
     public float dashDuration = 0.1f;
 
+    [Header("碰撞设置")]
+    [Tooltip("冲刺时会被这些 Layer 的碰撞体阻挡（例如：默认地面/建筑层）")]
+    public LayerMask obstacleLayers;
+
+    [Tooltip("与碰撞体保持的最小间隔，避免精度误差卡进墙里")]
+    public float skin = 0.02f;
+
     public override void Activate(PlayerSkills owner)
     {
         if (owner == null) return;
@@ -43,19 +50,46 @@ public class DashSkillSO : SkillSO
 
         if (dir.sqrMagnitude < 0.001f) return;
 
+        // 先根据碰撞体修正终点，防止穿墙
+        Vector3 startPos = t.position;
+        Vector3 endPos = ComputeDashEndPosition(startPos, dir.normalized);
+
         // 0 或负数时，保持原来的“瞬移”感
         if (dashDuration <= 0f)
         {
-            Vector3 deltaInstant = (Vector3)(dir.normalized * dashDistance);
-            t.position += deltaInstant;
+            t.position = endPos;
             return;
         }
 
         // 否则使用协程，在 dashDuration 内平滑移动
-        owner.StartCoroutine(DashRoutine(owner.gameObject, dir.normalized));
+        owner.StartCoroutine(DashRoutine(owner.gameObject, startPos, endPos));
     }
 
-    private System.Collections.IEnumerator DashRoutine(GameObject target, Vector2 dirNormalized)
+    /// <summary>
+    /// 从 startPos 朝 dirNormalized 方向尝试 dashDistance 距离，
+    /// 如果遇到 obstacleLayers 上的碰撞体，则终点停在碰撞点前一点。
+    /// </summary>
+    private Vector3 ComputeDashEndPosition(Vector3 startPos, Vector2 dirNormalized)
+    {
+        // 没配置 Layer 时，保持原来的“直线冲刺”行为
+        if (obstacleLayers == 0)
+        {
+            return startPos + (Vector3)(dirNormalized * dashDistance);
+        }
+
+        RaycastHit2D hit = Physics2D.Raycast(startPos, dirNormalized, dashDistance, obstacleLayers);
+        if (hit.collider != null)
+        {
+            // 命中障碍：停在碰撞点稍微外面一点，避免卡进墙
+            Vector3 hitPoint = hit.point;
+            return hitPoint - (Vector3)(dirNormalized * skin);
+        }
+
+        // 没有命中障碍，正常冲刺到最大距离
+        return startPos + (Vector3)(dirNormalized * dashDistance);
+    }
+
+    private System.Collections.IEnumerator DashRoutine(GameObject target, Vector3 startPos, Vector3 endPos)
     {
         if (target == null) yield break;
 
@@ -63,9 +97,6 @@ public class DashSkillSO : SkillSO
         if (t == null) yield break;
 
         Rigidbody2D rb = target.GetComponent<Rigidbody2D>();
-
-        Vector3 startPos = t.position;
-        Vector3 endPos = startPos + (Vector3)(dirNormalized * dashDistance);
 
         float elapsed = 0f;
 

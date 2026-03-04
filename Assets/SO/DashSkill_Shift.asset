@@ -17,3 +17,7 @@ MonoBehaviour:
   cooldown: 1
   dashDistance: 3
   dashDuration: 0.15
+  obstacleLayers:
+    serializedVersion: 2
+    m_Bits: 1
+  skin: 0.02
