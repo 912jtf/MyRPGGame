@@ -8,6 +8,7 @@ public class PlayerHealth : MonoBehaviour
 
     [Header("UI 引用")]
     public Image healthFillImage;   // 预留 Image，通过 fillAmount 显示血量
+    public TMPro.TMP_Text healthText;  // 血量文字（显示如 100/100）
 
     [Header("受击表现")]
     public Color hurtColor = Color.red;
@@ -29,26 +30,23 @@ public class PlayerHealth : MonoBehaviour
         // 如果在 Prefab 上没法手动拖引用，尝试在场景中自动寻找血条 Image
         if (healthFillImage == null)
         {
-            // 方案 1：优先通过 Tag 查找（如果你给血条物体加了 PlayerHealthBar 标签）
-            GameObject bar = null;
-            try
-            {
-                bar = GameObject.FindGameObjectWithTag("PlayerHealthBar");
-            }
-            catch
-            {
-                // 场景中没有这个 Tag 时会抛异常，忽略即可
-            }
-
-            // 方案 2：如果没找到，再通过名字查找一个叫 "HealthBar" 的物体
-            if (bar == null)
-            {
-                bar = GameObject.Find("HealthBar");
-            }
+            // 直接通过名字查找 "HealthBar"（敌人的叫 "EnemyHealthBar"，所以不会冲突）
+            GameObject bar = GameObject.Find("HealthBar");
 
             if (bar != null)
             {
                 healthFillImage = bar.GetComponent<Image>();
+            }
+        }
+
+        // 自动查找血量文字（如果没有手动赋值）
+        // 必须改名为 "PlayerHealthText" 避免和敌人血量条冲突
+        if (healthText == null)
+        {
+            GameObject textObj = GameObject.Find("PlayerHealthText");
+            if (textObj != null)
+            {
+                healthText = textObj.GetComponent<TMPro.TMP_Text>();
             }
         }
 
@@ -87,9 +85,16 @@ public class PlayerHealth : MonoBehaviour
 
     private void UpdateHealthUI()
     {
+        // 更新血量条
         if (healthFillImage != null && maxHealth > 0)
         {
             healthFillImage.fillAmount = (float)currentHealth / maxHealth;
+        }
+
+        // 更新血量文字（如 100/100）
+        if (healthText != null)
+        {
+            healthText.text = $"{currentHealth}/{maxHealth}";
         }
     }
 

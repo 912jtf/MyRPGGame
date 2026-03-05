@@ -43,6 +43,9 @@ public class PlayerLevel : MonoBehaviour
     [Tooltip("显示等级文字的 Text（例如 \"Lv.1\"），可留空自动按名字查找 LevelText")]
     public TMPro.TMP_Text levelText;
 
+    [Tooltip("显示经验数值的 Text（例如 \"0/7\"），可留空自动按名字查找 ExpText")]
+    public TMPro.TMP_Text expText;
+
     private PlayerHealth _playerHealth;
     private PlayerAttack _playerAttack;
 
@@ -62,7 +65,7 @@ public class PlayerLevel : MonoBehaviour
     }
 
     /// <summary>
-    /// 在场景里自动按名字查找经验条和等级文字。
+    /// 在场景里自动按名字查找经验条、等级文字和经验数值文字。
     /// </summary>
     private void AutoFindUI()
     {
@@ -81,6 +84,15 @@ public class PlayerLevel : MonoBehaviour
             if (go != null)
             {
                 levelText = go.GetComponent<TMPro.TMP_Text>();
+            }
+        }
+
+        if (expText == null)
+        {
+            GameObject go = GameObject.Find("ExpText");
+            if (go != null)
+            {
+                expText = go.GetComponent<TMPro.TMP_Text>();
             }
         }
     }
@@ -161,6 +173,20 @@ public class PlayerLevel : MonoBehaviour
         if (levelText != null)
         {
             levelText.text = $"Lv.{level}";
+        }
+
+        // 更新经验数值文字（如 0/7 或 Lv.Max）
+        if (expText != null)
+        {
+            if (level >= maxLevel)
+            {
+                expText.text = "Lv.Max";
+            }
+            else
+            {
+                int needExp = GetExpToNextLevel(level);
+                expText.text = $"{currentExp}/{needExp}";
+            }
         }
     }
 }
