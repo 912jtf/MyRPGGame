@@ -46,6 +46,9 @@ public class Fire : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        // 只对“身体”碰撞体造成伤害，忽略敌人的索敌用 Trigger，避免调大索敌半径时火球伤害范围跟着变大
+        if (other.isTrigger) return;
+
         EnemyHealth enemyHealth = other.GetComponent<EnemyHealth>();
         if (enemyHealth != null && damage > 0)
         {

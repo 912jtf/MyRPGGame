@@ -32,6 +32,14 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("同一时间场景中允许存在的敌人最大数量（0 或负数表示不限制）")]
     public int maxEnemies = 0;
 
+    [Header("出生点检测（避免卡墙）")]
+    [Tooltip("会阻挡走路的层（如建筑、墙、障碍），生成时避开这些碰撞体")]
+    public LayerMask obstacleLayers;
+    [Tooltip("检测半径，略大于敌人碰撞体即可")]
+    public float spawnCheckRadius = 0.5f;
+    [Tooltip("最多尝试几次随机位置，都无效则本帧不生成")]
+    public int maxSpawnAttempts = 10;
+
     private float _timer;
 
     private void Start()
@@ -80,15 +88,38 @@ public class EnemySpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// 在玩家周围四个方向之一随机生成一个敌人。
+    /// 在玩家周围随机生成一个敌人；若出生点与障碍重叠则重试，只出生在可走动区域。
     /// </summary>
     private void SpawnOne()
     {
         if (player == null) return;
 
         Vector3 playerPos = player.position;
+        int attempts = Mathf.Max(1, maxSpawnAttempts);
 
-        // 随机选择一个方向：上、下、左、右
+        for (int i = 0; i < attempts; i++)
+        {
+            Vector2 finalPos = PickRandomSpawnPosition(playerPos);
+
+            // 若未勾选障碍层，不检测，直接生成
+            if (obstacleLayers == 0)
+            {
+                Instantiate(enemyPrefab, finalPos, Quaternion.identity);
+                return;
+            }
+
+            // 检测该点是否与障碍重叠，不重叠才生成
+            if (!Physics2D.OverlapCircle(finalPos, spawnCheckRadius, obstacleLayers))
+            {
+                Instantiate(enemyPrefab, finalPos, Quaternion.identity);
+                return;
+            }
+        }
+        // 多次尝试仍无空地，本帧不生成
+    }
+
+    private Vector2 PickRandomSpawnPosition(Vector3 playerPos)
+    {
         int side = Random.Range(0, 4);
         Vector2 dir;
         switch (side)
@@ -99,23 +130,20 @@ public class EnemySpawner : MonoBehaviour
             default: dir = Vector2.right; break;
         }
 
-        // 在该方向上一个区间内随机距离，并增加少量左右/上下偏移，使生成位置更自然
         float distance = spawnDistance + Random.Range(-1f, 1f);
         Vector2 basePos = (Vector2)playerPos + dir * distance;
 
-        // 垂直于 dir 的随机偏移
         Vector2 perpendicular = new Vector2(-dir.y, dir.x);
         float scatter = Random.Range(-2f, 2f);
         Vector2 finalPos = basePos + perpendicular * scatter;
 
-        // 如果开启了边界限制，把生成位置限制在矩形范围内
         if (useBounds)
         {
             finalPos.x = Mathf.Clamp(finalPos.x, minPosition.x, maxPosition.x);
             finalPos.y = Mathf.Clamp(finalPos.y, minPosition.y, maxPosition.y);
         }
 
-        Instantiate(enemyPrefab, finalPos, Quaternion.identity);
+        return finalPos;
     }
 
     /// <summary>
