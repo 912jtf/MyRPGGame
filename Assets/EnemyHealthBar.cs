@@ -99,10 +99,10 @@ public class EnemyHealthBar : MonoBehaviour
             healthBar.fillAmount = currentHealth / maxHealth;
         }
 
-        // 更新血量文字（显示整数格式，方便阅读）
+        // 更新血量文字（显示浮点数，保留1位小数）
         if (healthText != null)
         {
-            healthText.text = $"{Mathf.FloorToInt(currentHealth)}/{Mathf.FloorToInt(maxHealth)}";
+            healthText.text = $"{currentHealth:F1}/{maxHealth:F1}";
         }
     }
 

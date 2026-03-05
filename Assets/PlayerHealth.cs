@@ -91,11 +91,10 @@ public class PlayerHealth : MonoBehaviour
             healthFillImage.fillAmount = currentHealth / maxHealth;
         }
 
-        // 更新血量文字（如 100/100）
+        // 更新血量文字（显示浮点数）
         if (healthText != null)
         {
-            // 显示整数格式，方便阅读
-            healthText.text = $"{Mathf.FloorToInt(currentHealth)}/{Mathf.FloorToInt(maxHealth)}";
+            healthText.text = $"{currentHealth:F1}/{maxHealth:F1}";
         }
     }
 

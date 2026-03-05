@@ -185,8 +185,8 @@ public class PlayerLevel : MonoBehaviour
             else
             {
                 float needExp = GetExpToNextLevel(level);
-                // 显示整数格式，方便阅读
-                expText.text = $"{Mathf.FloorToInt(currentExp)}/{Mathf.FloorToInt(needExp)}";
+                // 显示浮点数，保留1位小数
+                expText.text = $"{currentExp:F1}/{needExp:F1}";
             }
         }
     }

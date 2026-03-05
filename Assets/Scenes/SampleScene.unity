@@ -8231,7 +8231,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 3/3
+  m_text: 3.0/3.0
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -8784,7 +8784,7 @@ GameObject:
   - component: {fileID: 1371534934}
   - component: {fileID: 1371534933}
   m_Layer: 5
-  m_Name: "ExpBar\u5E95\u8272"
+  m_Name: "PlayerExpBar\u80CC\u666F\u9ED1\u8272"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9330,7 +9330,7 @@ Tilemap:
       - {fileID: -947762310, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -359349404, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1447009894, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5.0000005
+      m_AnimationSpeed: 5
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: -7, y: -1, z: 0}
@@ -9363,7 +9363,7 @@ Tilemap:
       - {fileID: 347383660, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 2119947242, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -1052858685, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5
+      m_AnimationSpeed: 5.0000005
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: -13, y: 0, z: 0}
@@ -9396,7 +9396,7 @@ Tilemap:
       - {fileID: 347383660, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 2119947242, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -1052858685, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5.0000005
+      m_AnimationSpeed: 5
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: -10, y: 0, z: 0}
@@ -9517,7 +9517,7 @@ Tilemap:
       - {fileID: 1673373420, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1082163113, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 721166698, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5.0000005
+      m_AnimationSpeed: 5
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: 4, y: 1, z: 0}
@@ -10175,8 +10175,8 @@ RectTransform:
   - {fileID: 524169737}
   - {fileID: 1737021932}
   - {fileID: 1743427926}
-  - {fileID: 1808199582}
   - {fileID: 148907904}
+  - {fileID: 1808199582}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -10250,8 +10250,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4279913692
-  m_fontColor: {r: 0.86415094, g: 0.297493, b: 0.102719784, a: 1}
+    rgba: 4294967295
+  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -10585,7 +10585,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.49304375, g: 0.34117642, b: 0.87058824, a: 1}
+  m_Color: {r: 0.1216447, g: 0.82766837, b: 0.9622642, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -11098,7 +11098,7 @@ GameObject:
   - component: {fileID: 1902610068}
   - component: {fileID: 1902610067}
   m_Layer: 5
-  m_Name: Image (2)
+  m_Name: PlayerExpBG
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -11136,7 +11136,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.9924528, g: 0.9924528, b: 0.9924528, a: 1}
+  m_Color: {r: 0.49411765, g: 0.34117648, b: 0.87058824, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
