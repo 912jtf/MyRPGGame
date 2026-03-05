@@ -6,7 +6,7 @@ public class PlayerAttack : MonoBehaviour
     public float attackRange = 0.5f;                 // 攻击半径
     public Vector2 attackOffset = new Vector2(0.5f, 0f); // 面向右时，相对玩家的位置偏移
     public LayerMask enemyLayer;                     // 只勾选 Enemy 层
-    public int attackDamage = 1;                     // 伤害值（敌人一下死，这里给 1 即可）
+    public float attackDamage = 1f;                     // 伤害值（支持浮点数）
 
     private Animator animator;
     private SpriteRenderer spriteRenderer;

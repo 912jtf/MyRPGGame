@@ -3,11 +3,11 @@ using UnityEngine;
 public class EnemyHealth : MonoBehaviour
 {
     [Header("生命设置")]
-    public int maxHealth = 1;   // 一下死
+    public float maxHealth = 1f;   // 敌人生命值
 
     [Header("经验奖励")]
     [Tooltip("击杀此敌人时给予玩家的经验值")]
-    public int expReward = 1;
+    public float expReward = 1f;
 
     [Header("受击表现")]
     public Color hurtColor = Color.red;
@@ -20,7 +20,7 @@ public class EnemyHealth : MonoBehaviour
     private EnemyHealthBar enemyHealthBar;
     private bool healthBarInitialized = false;
 
-    private int currentHealth;
+    private float currentHealth;
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
 
@@ -59,7 +59,7 @@ public class EnemyHealth : MonoBehaviour
         healthBarInitialized = true;
     }
 
-    public void TakeDamage(int damage)
+    public void TakeDamage(float damage)
     {
         // 首次受伤时初始化血量条（确保所有物体都已初始化）
         if (!healthBarInitialized)
@@ -71,7 +71,7 @@ public class EnemyHealth : MonoBehaviour
         // 确保血量不低于 0
         if (currentHealth < 0)
         {
-            currentHealth = 0;
+            currentHealth = 0f;
         }
 
         // 受击闪红

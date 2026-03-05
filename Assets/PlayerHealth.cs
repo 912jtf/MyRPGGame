@@ -4,7 +4,7 @@ using UnityEngine.UI;
 public class PlayerHealth : MonoBehaviour
 {
     [Header("生命设置")]
-    public int maxHealth = 3;
+    public float maxHealth = 3f;
 
     [Header("UI 引用")]
     public Image healthFillImage;   // 预留 Image，通过 fillAmount 显示血量
@@ -14,7 +14,7 @@ public class PlayerHealth : MonoBehaviour
     public Color hurtColor = Color.red;
     public float hurtFlashTime = 0.1f;
 
-    private int currentHealth;
+    private float currentHealth;
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
 
@@ -53,7 +53,7 @@ public class PlayerHealth : MonoBehaviour
         UpdateHealthUI();
     }
 
-    public void TakeDamage(int damage)
+    public void TakeDamage(float damage)
     {
         currentHealth -= damage;
         if (currentHealth < 0)
@@ -88,13 +88,14 @@ public class PlayerHealth : MonoBehaviour
         // 更新血量条
         if (healthFillImage != null && maxHealth > 0)
         {
-            healthFillImage.fillAmount = (float)currentHealth / maxHealth;
+            healthFillImage.fillAmount = currentHealth / maxHealth;
         }
 
         // 更新血量文字（如 100/100）
         if (healthText != null)
         {
-            healthText.text = $"{currentHealth}/{maxHealth}";
+            // 显示整数格式，方便阅读
+            healthText.text = $"{Mathf.FloorToInt(currentHealth)}/{Mathf.FloorToInt(maxHealth)}";
         }
     }
 
@@ -108,7 +109,7 @@ public class PlayerHealth : MonoBehaviour
     /// 为玩家回复生命值，最多不超过 maxHealth。
     /// </summary>
     /// <param name="amount">回复量（正数有效）</param>
-    public void Heal(int amount)
+    public void Heal(float amount)
     {
         if (amount <= 0) return;
 

@@ -20,7 +20,7 @@ public class Enemy : MonoBehaviour
 
     [Header("伤害设置")]
     public LayerMask playerLayer;         // 只勾选 Player 层
-    public int attackDamage = 1;          // 对玩家造成的伤害值
+    public float attackDamage = 1f;          // 对玩家造成的伤害值
 
     [Header("Animator 参数名")]
     // 这里已经按你修正后的名字配置好，除非 Animator 里改名，否则不用再动

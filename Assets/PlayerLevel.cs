@@ -21,19 +21,19 @@ public class PlayerLevel : MonoBehaviour
     public int level = 1;
 
     [Tooltip("当前经验值")]
-    public int currentExp = 0;
+    public float currentExp = 0f;
 
     [Tooltip("最大等级")]
     public int maxLevel = 5;
 
     // 升级所需经验表，下标 0 表示 1->2 所需经验
     // 对应题目要求：7, 10, 13, 16
-    private readonly int[] _expToNext =
+    private readonly float[] _expToNext =
     {
-        7,  // 1->2
-        10, // 2->3
-        13, // 3->4
-        16  // 4->5
+        7f,  // 1->2
+        10f, // 2->3
+        13f, // 3->4
+        16f  // 4->5
     };
 
     [Header("UI（可选）")]
@@ -100,7 +100,7 @@ public class PlayerLevel : MonoBehaviour
     /// <summary>
     /// 外部（例如 EnemyHealth.Die）调用，为玩家增加经验。
     /// </summary>
-    public void AddExp(int amount)
+    public void AddExp(float amount)
     {
         if (amount <= 0) return;
         if (level >= maxLevel) return; // 满级后不再积累经验
@@ -120,18 +120,18 @@ public class PlayerLevel : MonoBehaviour
     /// <summary>
     /// 获取当前等级升到下一级所需经验。
     /// </summary>
-    private int GetExpToNextLevel(int currentLevel)
+    private float GetExpToNextLevel(int currentLevel)
     {
         int index = currentLevel - 1;
         if (index < 0 || index >= _expToNext.Length)
         {
-            return int.MaxValue;
+            return float.MaxValue;
         }
         return _expToNext[index];
     }
 
     /// <summary>
-    /// 处理升级：等级 +1，回复 2 点生命，攻击伤害 +1。
+    /// 处理升级：等级 +1，回复 2 点生命，攻击伤害 +0.5。
     /// </summary>
     private void LevelUp()
     {
@@ -140,14 +140,14 @@ public class PlayerLevel : MonoBehaviour
         // 提高 2 点生命值上限，同时增加 2 点当前生命值
         if (_playerHealth != null)
         {
-            _playerHealth.maxHealth += 2;
-            _playerHealth.Heal(2);
+            _playerHealth.maxHealth += 2f;
+            _playerHealth.Heal(2f);
         }
 
-        // 攻击伤害 +1（永久累加）
+        // 攻击伤害 +0.5（永久累加）
         if (_playerAttack != null)
         {
-            _playerAttack.attackDamage += 1;
+            _playerAttack.attackDamage += 0.5f;
         }
     }
 
@@ -184,8 +184,9 @@ public class PlayerLevel : MonoBehaviour
             }
             else
             {
-                int needExp = GetExpToNextLevel(level);
-                expText.text = $"{currentExp}/{needExp}";
+                float needExp = GetExpToNextLevel(level);
+                // 显示整数格式，方便阅读
+                expText.text = $"{Mathf.FloorToInt(currentExp)}/{Mathf.FloorToInt(needExp)}";
             }
         }
     }

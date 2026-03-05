@@ -21,8 +21,8 @@ public class EnemyHealthBar : MonoBehaviour
     [Tooltip("血量文字（显示如 3/5）")]
     public TextMeshProUGUI healthText;
 
-    private int currentHealth;
-    private int maxHealth;
+    private float currentHealth;
+    private float maxHealth;
     private EnemyHealth currentEnemy;  // 记录当前显示的敌人
 
     private void Start()
@@ -80,7 +80,7 @@ public class EnemyHealthBar : MonoBehaviour
     /// 更新敌人血量显示。只有被指定的敌人才会显示血量条。
     /// 多个敌人同时受伤时，只显示最后被打中的敌人。
     /// </summary>
-    public void UpdateHealth(int current, int max, EnemyHealth enemy)
+    public void UpdateHealth(float current, float max, EnemyHealth enemy)
     {
         // 如果切换了敌人，先重置旧数据
         if (currentEnemy != enemy)
@@ -96,13 +96,13 @@ public class EnemyHealthBar : MonoBehaviour
         // 更新血量条
         if (healthBar != null && maxHealth > 0)
         {
-            healthBar.fillAmount = (float)currentHealth / maxHealth;
+            healthBar.fillAmount = currentHealth / maxHealth;
         }
 
-        // 更新血量文字
+        // 更新血量文字（显示整数格式，方便阅读）
         if (healthText != null)
         {
-            healthText.text = $"{currentHealth}/{maxHealth}";
+            healthText.text = $"{Mathf.FloorToInt(currentHealth)}/{Mathf.FloorToInt(maxHealth)}";
         }
     }
 
