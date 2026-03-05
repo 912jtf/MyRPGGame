@@ -297,21 +297,22 @@ public class Enemy : MonoBehaviour
 
     /// <summary>
     /// 检测敌人前方是否被障碍物挡住（建筑、墙等）
-    /// 用于 Kinematic 模式下的碰撞检测，忽略其他敌人
+    /// 用于 Kinematic 模式下的碰撞检测，只检测 Default layer（建筑物），忽略 Enemy layer（其他敌人）
     /// </summary>
     private bool IsPathBlocked(Vector2 fromPos, Vector2 direction, float distance)
     {
+        // 创建 LayerMask：只检测 Default layer（建筑物），忽略 Enemy layer（敌人）
+        int defaultLayer = LayerMask.NameToLayer("Default");
+        LayerMask blockMask = 1 << defaultLayer;  // 只检测 Default layer
+        
         // Raycast 检测：从敌人位置沿移动方向检测，距离为本帧移动距离 + 0.2f 的安全距离
-        RaycastHit2D hit = Physics2D.Raycast(fromPos, direction, distance + 0.2f);
-        if (hit.collider != null && !hit.collider.isTrigger)
+        // 使用 LayerMask 只检测建筑物，不检测敌人
+        RaycastHit2D hit = Physics2D.Raycast(fromPos, direction, distance + 0.2f, blockMask);
+        
+        // 如果检测到 Default layer 的碰撞体（建筑物），则被挡住
+        if (hit.collider != null)
         {
-            // 检查碰到的是不是其他敌人（EnemyHealth 组件）
-            // 如果是其他敌人，忽略，继续移动
-            if (hit.collider.GetComponent<EnemyHealth>() != null)
-            {
-                return false;  // 敌人可以穿过其他敌人
-            }
-            // 前方有非 Trigger 的碰撞体（建筑、墙等），返回 true 表示被挡住
+            Debug.Log($"[Enemy {gameObject.name}] 前方被 {hit.collider.gameObject.name} 挡住");
             return true;
         }
         return false;
