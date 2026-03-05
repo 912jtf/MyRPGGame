@@ -131,11 +131,32 @@ public class Enemy : MonoBehaviour
         }
 
         // 不在攻击范围：继续向玩家移动
-        Vector2 nextPos = myPos + dir * moveSpeed * Time.deltaTime;
-        if (rb != null)
-            rb.MovePosition(nextPos);
+        float moveDistance = moveSpeed * Time.deltaTime;
+        Vector2 nextPos = myPos + dir * moveDistance;
+        
+        // 检测前方是否有障碍物
+        if (!IsPathBlocked(myPos, dir, moveDistance))
+        {
+            // 前方通畅，继续向玩家移动
+            if (rb != null)
+                rb.MovePosition(nextPos);
+            else
+                transform.position = nextPos;
+        }
         else
-            transform.position = nextPos;
+        {
+            // 前方被挡住，尝试向左或向右绕过障碍
+            Vector2 alternativeDir = FindAlternativePath(myPos, dir, targetPos, moveDistance);
+            if (alternativeDir != Vector2.zero)
+            {
+                nextPos = myPos + alternativeDir * moveDistance;
+                if (rb != null)
+                    rb.MovePosition(nextPos);
+                else
+                    transform.position = nextPos;
+            }
+            // 如果没有替代路径，就停留在原地
+        }
     }
 
     void UpdateCooldown()
@@ -206,11 +227,7 @@ public class Enemy : MonoBehaviour
             targetPlayer = other.transform;
     }
 
-    void OnTriggerExit2D(Collider2D other)
-    {
-        if (other.CompareTag("Player") && other.transform == targetPlayer)
-            targetPlayer = null;
-    }
+    // 已删除 OnTriggerExit2D：敌人一旦发现玩家就永远追逐，不会因离开索敌范围而放弃目标
 
     // ===== Animation Event =====
 
@@ -276,6 +293,70 @@ public class Enemy : MonoBehaviour
             currentState = State.Idle;
             SetAnimState(idle: true, walk: false, attack: false);
         }
+    }
+
+    /// <summary>
+    /// 检测敌人前方是否被障碍物挡住（建筑、墙等）
+    /// 用于 Kinematic 模式下的碰撞检测，忽略其他敌人
+    /// </summary>
+    private bool IsPathBlocked(Vector2 fromPos, Vector2 direction, float distance)
+    {
+        // Raycast 检测：从敌人位置沿移动方向检测，距离为本帧移动距离 + 0.2f 的安全距离
+        RaycastHit2D hit = Physics2D.Raycast(fromPos, direction, distance + 0.2f);
+        if (hit.collider != null && !hit.collider.isTrigger)
+        {
+            // 检查碰到的是不是其他敌人（EnemyHealth 组件）
+            // 如果是其他敌人，忽略，继续移动
+            if (hit.collider.GetComponent<EnemyHealth>() != null)
+            {
+                return false;  // 敌人可以穿过其他敌人
+            }
+            // 前方有非 Trigger 的碰撞体（建筑、墙等），返回 true 表示被挡住
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 当前方被挡住时，尝试向左或向右绕过障碍
+    /// 返回一个可通行的方向，如果两个方向都被挡则返回 zero
+    /// </summary>
+    private Vector2 FindAlternativePath(Vector2 fromPos, Vector2 mainDir, Vector2 targetPos, float moveDistance)
+    {
+        // 计算左右两个方向（垂直于前进方向）
+        // leftDir: 逆时针旋转 mainDir 90 度
+        // rightDir: 顺时针旋转 mainDir 90 度
+        Vector2 leftDir = new Vector2(-mainDir.y, mainDir.x).normalized;
+        Vector2 rightDir = -leftDir;
+
+        // 计算两个方向分别能到达的位置
+        Vector2 leftPos = fromPos + leftDir * moveDistance;
+        Vector2 rightPos = fromPos + rightDir * moveDistance;
+
+        // 计算哪个方向能让敌人更接近玩家
+        float distToTarget_Left = Vector2.Distance(leftPos, targetPos);
+        float distToTarget_Right = Vector2.Distance(rightPos, targetPos);
+
+        // 优先尝试能让敌人更接近玩家的方向
+        if (distToTarget_Left < distToTarget_Right)
+        {
+            if (!IsPathBlocked(fromPos, leftDir, moveDistance))
+                return leftDir;  // 左边通畅，返回左方向
+        }
+        else
+        {
+            if (!IsPathBlocked(fromPos, rightDir, moveDistance))
+                return rightDir;  // 右边通畅，返回右方向
+        }
+
+        // 如果优先方向被挡，尝试另一边
+        if (!IsPathBlocked(fromPos, rightDir, moveDistance))
+            return rightDir;
+        if (!IsPathBlocked(fromPos, leftDir, moveDistance))
+            return leftDir;
+
+        // 两个方向都被挡，返回 zero（停留原地）
+        return Vector2.zero;
     }
 
     private void OnDrawGizmosSelected()
