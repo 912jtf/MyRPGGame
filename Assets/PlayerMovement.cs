@@ -10,6 +10,18 @@ public class PlayerMovement : MonoBehaviour
     [Tooltip("小于此值的输入视为 0，避免摇杆/键盘漂移导致偶发单向移动")]
     public float inputDeadZone = 0.2f;
 
+    [Header("地图边界（空气墙）")]
+    [Tooltip("勾选后限制角色不走出该矩形范围")]
+    public bool useMapBounds = true;
+    [Tooltip("边界左下角 X")]
+    public float mapMinX = -20f;
+    [Tooltip("边界右上角 X")]
+    public float mapMaxX = 20f;
+    [Tooltip("边界左下角 Y")]
+    public float mapMinY = -20f;
+    [Tooltip("边界右上角 Y")]
+    public float mapMaxY = 20f;
+
     private Rigidbody2D rb;
     private Animator animator;
     private SpriteRenderer spriteRenderer;
@@ -77,8 +89,20 @@ public class PlayerMovement : MonoBehaviour
 
     void LateUpdate()
     {
-        // 联机时己方无输入则再次清零速度，减少同步出去的位移漂移
         if (rb == null) return;
+
+        // 地图边界：把位置限制在矩形内，像空气墙
+        if (useMapBounds)
+        {
+            Vector2 pos = transform.position;
+            pos.x = Mathf.Clamp(pos.x, mapMinX, mapMaxX);
+            pos.y = Mathf.Clamp(pos.y, mapMinY, mapMaxY);
+            transform.position = pos;
+            if (rb != null)
+                rb.position = pos;
+        }
+
+        // 联机时己方无输入则再次清零速度，减少同步出去的位移漂移
         if ((NetworkClient.active || NetworkServer.active) && GetComponent<NetworkIdentity>() != null && moveInput.sqrMagnitude < 0.001f)
         {
             rb.velocity = Vector2.zero;

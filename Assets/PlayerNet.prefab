@@ -170,6 +170,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   speed: 5
   inputDeadZone: 0.15
+  useMapBounds: 1
+  mapMinX: -15.34
+  mapMaxX: 15.34
+  mapMinY: -8.4
+  mapMaxY: 8.4
 --- !u!95 &1879685869537628964
 Animator:
   serializedVersion: 5
