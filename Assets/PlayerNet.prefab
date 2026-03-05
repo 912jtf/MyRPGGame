@@ -208,7 +208,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ffa5919dc824a9b49b84afa2f7e863d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  attackRange: 1.1
+  attackRange: 0.5
   attackOffset: {x: 0.5, y: 0}
   enemyLayer:
     serializedVersion: 2
@@ -229,6 +229,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxHealth: 5
   healthFillImage: {fileID: 0}
+  healthText: {fileID: 0}
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
 --- !u!114 &3046166808100115955
@@ -316,3 +317,4 @@ MonoBehaviour:
   maxLevel: 5
   expFillImage: {fileID: 0}
   levelText: {fileID: 0}
+  expText: {fileID: 0}

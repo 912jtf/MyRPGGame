@@ -69,6 +69,8 @@ public class PlayerAttack : MonoBehaviour
     /// </summary>
     public void OnAttackHit()
     {
+        Debug.Log($"[PlayerAttack.OnAttackHit] Called! attackDamage = {attackDamage}");
+        
         // 攻击半径 <= 0 时，直接认为没有攻击范围，不做判定
         if (attackRange <= 0f)
         {

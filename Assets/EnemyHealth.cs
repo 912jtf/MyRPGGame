@@ -61,6 +61,8 @@ public class EnemyHealth : MonoBehaviour
 
     public void TakeDamage(float damage)
     {
+        Debug.Log($"[EnemyHealth.TakeDamage] 敌人 {gameObject.name} 受到伤害 {damage}，当前血量 {currentHealth} → {currentHealth - damage}");
+        
         // 首次受伤时初始化血量条（确保所有物体都已初始化）
         if (!healthBarInitialized)
         {
