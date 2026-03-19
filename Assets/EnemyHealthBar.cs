@@ -23,17 +23,35 @@ public class EnemyHealthBar : MonoBehaviour
 
     private float currentHealth;
     private float maxHealth;
-    private EnemyHealth currentEnemy;  // 记录当前显示的敌人
+    private EnemyHealth currentEnemy;
+    
+    // 单例模式：全局静态引用，便于其他脚本快速访问
+    public static EnemyHealthBar Instance { get; set; }
+
+    private void Awake()
+    {
+        // 单例初始化
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else if (Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+    }
 
     private void Start()
     {
         // 如果没有手动拖引用，尝试自动查找
         AutoFindUIReferences();
+        // 初始状态：隐藏血量条，直到有敌人被击中
+        Hide();
     }
 
     /// <summary>
     /// 自动查找 UI 组件（如果没有手动赋值）
-    /// 关键：所有查找都是在 EnemyHealthBarUI 的子物体范围内，不会误找到玩家的 UI
     /// </summary>
     private void AutoFindUIReferences()
     {
@@ -53,21 +71,28 @@ public class EnemyHealthBar : MonoBehaviour
 
         if (healthBar == null)
         {
-            // 特别注意：HealthBar 是 HealthBarBG 的子物体
-            Transform bgTrans = transform.Find("HealthBarBG");
-            if (bgTrans != null)
+            // 优先查找 EnemyHealthBar（直接子物体）
+            Transform barTrans = transform.Find("EnemyHealthBar");
+            if (barTrans != null)
             {
-                Transform barTrans = bgTrans.Find("HealthBar");
-                if (barTrans != null)
-                    healthBar = barTrans.GetComponent<Image>();
+                healthBar = barTrans.GetComponent<Image>();
+            }
+            else
+            {
+                // 备选：查找 HealthBarBG 下的 HealthBar（嵌套结构）
+                Transform bgTrans = transform.Find("HealthBarBG");
+                if (bgTrans != null)
+                {
+                    barTrans = bgTrans.Find("HealthBar");
+                    if (barTrans != null)
+                        healthBar = barTrans.GetComponent<Image>();
+                }
             }
         }
 
         if (healthText == null)
         {
-            // 优先查找 EnemyHealthText（避免和玩家 HealthText 冲突）
             Transform textTrans = transform.Find("EnemyHealthText");
-            // 如果没有，再查找 HealthText（向后兼容）
             if (textTrans == null)
                 textTrans = transform.Find("HealthText");
             
@@ -78,16 +103,30 @@ public class EnemyHealthBar : MonoBehaviour
 
     /// <summary>
     /// 更新敌人血量显示。只有被指定的敌人才会显示血量条。
-    /// 多个敌人同时受伤时，只显示最后被打中的敌人。
     /// </summary>
     public void UpdateHealth(float current, float max, EnemyHealth enemy)
     {
-        // 如果切换了敌人，先重置旧数据
+        // 如果切换了敌人，先重置旧数据并更新新敌人的信息
         if (currentEnemy != enemy)
         {
             currentEnemy = enemy;
-            // 重置数据，清除旧敌人的maxHealth等信息
-            ResetForNewEnemy();
+            // 清除旧敌人的数据，但不清空图标
+            currentHealth = 0;
+            maxHealth = 0;
+            if (healthBar != null)
+            {
+                healthBar.fillAmount = 0f;
+            }
+            if (healthText != null)
+            {
+                healthText.text = "0/0";
+            }
+            
+            // 更新新敌人的图标
+            if (enemy != null && enemy.enemyIcon != null)
+            {
+                SetEnemyIcon(enemy.enemyIcon);
+            }
         }
 
         currentHealth = current;
@@ -102,7 +141,7 @@ public class EnemyHealthBar : MonoBehaviour
         // 更新血量文字（显示浮点数，保留1位小数）
         if (healthText != null)
         {
-            healthText.text = $"{currentHealth:F1}/{maxHealth:F1}";
+            healthText.text = string.Format("{0:F1}/{1:F1}", currentHealth, maxHealth);
         }
     }
 
@@ -149,7 +188,7 @@ public class EnemyHealthBar : MonoBehaviour
         }
         if (healthText != null)
         {
-            healthText.text = "0/0";
+            healthText.text = "0.0/0.0";
         }
     }
 }

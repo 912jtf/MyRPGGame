@@ -7,8 +7,8 @@ using UnityEngine;
 public class EnemySpawner : MonoBehaviour
 {
     [Header("生成设置")]
-    [Tooltip("要生成的敌人预制体（拖入 enemy Prefab）")]
-    public GameObject enemyPrefab;
+    [Tooltip("要生成的敌人预制体数组（可拖入多个敌人 Prefab，会随机生成其中一个）")]
+    public GameObject[] enemyPrefabs;
 
     [Tooltip("玩家 Transform（可留空，运行时自动按 Tag=Player 查找）")]
     public Transform player;
@@ -56,7 +56,7 @@ public class EnemySpawner : MonoBehaviour
 
     private void Update()
     {
-        if (enemyPrefab == null) return;
+        if (enemyPrefabs == null || enemyPrefabs.Length == 0) return;
 
         // 联机模式下 PlayerNet 是在点击 Host / Client 后由 NetworkManager 动态生成的，
         // 因此 Start 时场景里还没有 Tag=Player 的物体。
@@ -92,10 +92,14 @@ public class EnemySpawner : MonoBehaviour
     /// </summary>
     private void SpawnOne()
     {
-        if (player == null) return;
+        if (player == null || enemyPrefabs == null || enemyPrefabs.Length == 0) return;
 
         Vector3 playerPos = player.position;
         int attempts = Mathf.Max(1, maxSpawnAttempts);
+
+        // 从敌人预制体数组中随机选择一个
+        GameObject selectedPrefab = enemyPrefabs[Random.Range(0, enemyPrefabs.Length)];
+        if (selectedPrefab == null) return;
 
         for (int i = 0; i < attempts; i++)
         {
@@ -104,14 +108,14 @@ public class EnemySpawner : MonoBehaviour
             // 若未勾选障碍层，不检测，直接生成
             if (obstacleLayers == 0)
             {
-                Instantiate(enemyPrefab, finalPos, Quaternion.identity);
+                Instantiate(selectedPrefab, finalPos, Quaternion.identity);
                 return;
             }
 
             // 检测该点是否与障碍重叠，不重叠才生成
             if (!Physics2D.OverlapCircle(finalPos, spawnCheckRadius, obstacleLayers))
             {
-                Instantiate(enemyPrefab, finalPos, Quaternion.identity);
+                Instantiate(selectedPrefab, finalPos, Quaternion.identity);
                 return;
             }
         }

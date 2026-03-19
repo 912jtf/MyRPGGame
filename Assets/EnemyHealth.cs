@@ -32,30 +32,86 @@ public class EnemyHealth : MonoBehaviour
         {
             originalColor = spriteRenderer.color;
         }
+        
+        // 在 Awake 时就初始化血量条，确保 EnemyHealthBar.Instance 被正确设置
+        InitializeHealthBar();
     }
 
     /// <summary>
-    /// 延迟初始化血量条（在第一次受伤时查找，确保所有物体都已初始化）
+    /// 初始化血量条（在 Awake 时调用，确保所有物体都已初始化）
     /// </summary>
     private void InitializeHealthBar()
     {
         if (healthBarInitialized) return;
 
-        GameObject healthBarUI = GameObject.Find("EnemyHealthBarUI");
-        if (healthBarUI != null)
+        Debug.Log($"[EnemyHealth.InitializeHealthBar] 开始初始化");
+
+        // 方案 1：检查单例
+        if (EnemyHealthBar.Instance != null)
         {
-            enemyHealthBar = healthBarUI.GetComponent<EnemyHealthBar>();
-            if (enemyHealthBar != null)
+            enemyHealthBar = EnemyHealthBar.Instance;
+            Debug.Log($"[EnemyHealth.InitializeHealthBar] 方案 1 成功：Instance");
+        }
+        else
+        {
+            Debug.Log($"[EnemyHealth.InitializeHealthBar] 方案 1 失败：Instance 为 null");
+            
+            // 方案 2：用 GameObject.Find 按名字查找
+            GameObject healthBarUI = GameObject.Find("EnemyHealthBarUI");
+            Debug.Log($"[EnemyHealth.InitializeHealthBar] 方案 2：GameObject.Find 结果 = {(healthBarUI != null ? "成功" : "失败")}");
+            
+            if (healthBarUI != null)
             {
-                // 初始化血量条：清除旧数据，设置敌人图片
-                enemyHealthBar.ResetForNewEnemy();
-                if (enemyIcon != null)
+                enemyHealthBar = healthBarUI.GetComponent<EnemyHealthBar>();
+                Debug.Log($"[EnemyHealth.InitializeHealthBar] 方案 2：GetComponent 结果 = {(enemyHealthBar != null ? "成功" : "失败")}");
+                
+                if (enemyHealthBar != null)
                 {
-                    enemyHealthBar.SetEnemyIcon(enemyIcon);
+                    EnemyHealthBar.Instance = enemyHealthBar;
                 }
-                enemyHealthBar.Hide();
+            }
+            
+            // 方案 3：遍历所有物体查找（包括禁用的）
+            if (enemyHealthBar == null)
+            {
+                EnemyHealthBar[] allBars = FindObjectsOfType<EnemyHealthBar>(true);
+                Debug.Log($"[EnemyHealth.InitializeHealthBar] 方案 3：FindObjectsOfType 找到 {allBars.Length} 个");
+                
+                if (allBars.Length > 0)
+                {
+                    enemyHealthBar = allBars[0];
+                    EnemyHealthBar.Instance = enemyHealthBar;
+                    Debug.Log($"[EnemyHealth.InitializeHealthBar] 方案 3 成功");
+                }
+                else
+                {
+                    Debug.LogError($"[EnemyHealth.InitializeHealthBar] 三个方案都失败了！找不到 EnemyHealthBar 脚本");
+                }
             }
         }
+        
+        if (enemyHealthBar != null)
+        {
+            Debug.Log($"[EnemyHealth.InitializeHealthBar] enemyHealthBar 已找到，开始激活");
+            
+            // 确保血量条物体是激活的
+            if (!enemyHealthBar.gameObject.activeSelf)
+            {
+                enemyHealthBar.gameObject.SetActive(true);
+            }
+            
+            // 初始化血量条：清除旧数据，设置敌人图片
+            enemyHealthBar.ResetForNewEnemy();
+            if (enemyIcon != null)
+            {
+                enemyHealthBar.SetEnemyIcon(enemyIcon);
+            }
+            
+            // 初始化后隐藏
+            enemyHealthBar.Hide();
+            Debug.Log($"[EnemyHealth.InitializeHealthBar] 初始化完成");
+        }
+        
         healthBarInitialized = true;
     }
 
@@ -87,8 +143,13 @@ public class EnemyHealth : MonoBehaviour
         // 更新血量条 UI（首次受伤时显示）
         if (enemyHealthBar != null)
         {
+            Debug.Log($"[EnemyHealth.TakeDamage] 血量条已显示");
             enemyHealthBar.Show();  // 显示血量条
             enemyHealthBar.UpdateHealth(currentHealth, maxHealth, this);  // 传递当前敌人
+        }
+        else
+        {
+            Debug.LogError($"[EnemyHealth.TakeDamage] 错误：enemyHealthBar 为 null！");
         }
 
         if (currentHealth <= 0)
