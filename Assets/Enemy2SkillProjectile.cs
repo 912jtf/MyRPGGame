@@ -35,6 +35,12 @@ public class Enemy2SkillProjectile : MonoBehaviour
     [Tooltip("是否在到达目的地后停止。关闭后会一直沿直线飞行到 lifeTime。")]
     public bool stopAtDestination = false;
 
+    [Header("Obstacle Hit")]
+    [Tooltip("技能弹丸碰到建筑/墙等障碍物的图层时，立刻销毁（避免穿模）。")]
+    public bool destroyOnObstacleHit = true;
+    [Tooltip("障碍物所在的 Layer。若留空，会默认使用 Default 层。")]
+    public LayerMask obstacleLayers;
+
     [Header("Lifetime")]
     public float lifeTime = 1.2f;
 
@@ -55,6 +61,14 @@ public class Enemy2SkillProjectile : MonoBehaviour
     {
         _rb = GetComponent<Rigidbody2D>();
         _spriteRenderer = GetComponent<SpriteRenderer>();
+
+        // 方便你不想再手动配 Layer：默认用 Default 层做障碍物
+        if (obstacleLayers.value == 0)
+        {
+            int defaultLayer = LayerMask.NameToLayer("Default");
+            if (defaultLayer >= 0)
+                obstacleLayers = 1 << defaultLayer;
+        }
     }
 
     void Start()
@@ -122,13 +136,30 @@ public class Enemy2SkillProjectile : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
+        if (destroyOnObstacleHit && IsInObstacleLayer(other))
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         TryDealDamage(other);
     }
 
     void OnTriggerStay2D(Collider2D other)
     {
         // 避免玩家在爆炸窗口开启前就已进入触发器时漏判伤害
+        if (destroyOnObstacleHit && IsInObstacleLayer(other))
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         TryDealDamage(other);
+    }
+
+    bool IsInObstacleLayer(Collider2D other)
+    {
+        return ((obstacleLayers.value & (1 << other.gameObject.layer)) != 0);
     }
 
     void TryDealDamage(Collider2D other)
