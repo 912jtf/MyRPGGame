@@ -30,6 +30,10 @@ public class Enemy : MonoBehaviour
     [Tooltip("enemy2 专用：Animator 里新增 Bool「IsSkillCharging」，用于蓄力动画；近战仍用 IsAttacking → Enemy2Attack")]
     [SerializeField] string skillChargingBoolName = "IsSkillCharging";
 
+    [Header("Facing")]
+    [Tooltip("用于修正精灵初始朝向是否反了。勾上后，所有 flipX 逻辑会反向。")]
+    public bool invertFacing = false;
+
     Animator animator;
     Rigidbody2D rb;
     SpriteRenderer spriteRenderer;
@@ -103,7 +107,7 @@ public class Enemy : MonoBehaviour
         {
             Vector2 dir = (Vector2)targetPlayer.position - (Vector2)transform.position;
             if (dir.sqrMagnitude > 0.0001f && spriteRenderer != null)
-                spriteRenderer.flipX = dir.x < 0f;
+                spriteRenderer.flipX = (dir.x < 0f) ^ invertFacing;
         }
     }
 
@@ -155,7 +159,7 @@ public class Enemy : MonoBehaviour
         // 翻转朝向
         if (dir.sqrMagnitude > 0.0001f && spriteRenderer != null)
         {
-            spriteRenderer.flipX = dir.x < 0f;
+            spriteRenderer.flipX = (dir.x < 0f) ^ invertFacing;
         }
 
         float dist = Vector2.Distance(myPos, targetPos);
@@ -396,7 +400,7 @@ public class Enemy : MonoBehaviour
             // 冷却中：保持待机朝向玩家
             Vector2 dir = (targetPos - myPos).normalized;
             if (dir.sqrMagnitude > 0.0001f && spriteRenderer != null)
-                spriteRenderer.flipX = dir.x < 0f;
+                spriteRenderer.flipX = (dir.x < 0f) ^ invertFacing;
 
             if (rb != null) rb.velocity = Vector2.zero;
             SetAnimState(idle: true, walk: false, attack: false);

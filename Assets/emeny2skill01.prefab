@@ -194,5 +194,9 @@ MonoBehaviour:
   destroyImmediatelyAfterAoe: 0
   destroyOnHit: 0
   stopAtDestination: 0
+  destroyOnObstacleHit: 1
+  obstacleLayers:
+    serializedVersion: 2
+    m_Bits: 0
   lifeTime: 4
   playerTag: Player
