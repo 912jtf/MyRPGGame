@@ -34,7 +34,23 @@ public class Enemy : MonoBehaviour
     Transform targetPlayer;   // 索敌到的玩家
     float nextAttackTime;     // 下次允许攻击的时间
 
-    enum State { Idle, Chase, Attack, Cooldown }
+    [Header("enemy2 远程技能（射出去）")]
+    [Tooltip("只给 enemy2 打开，其他敌人保持关闭")]
+    public bool useEnemy2Skill01 = false;
+    public GameObject enemy2Skill01Prefab;   // enemy2Skill01 的预制体
+    public Transform enemy2Skill01SpawnPoint; // 敌人身上的发射点（建议建一个空物体）
+    public float enemy2Skill01Cooldown = 3f;
+    public float enemy2Skill01MinDistance = 1.0f; // 小于这个距离不放
+    public float enemy2Skill01MaxDistance = 6.0f; // 大于这个距离不放
+    public float enemy2Skill01SpeedOverride = -1f; // <0 表示用弹丸自身 speed
+    public float enemy2Skill01DamageMultiplier = 2f;
+    public float enemy2Skill01ChargeTime = 0.5f; // 蓄力时间（秒）
+    float nextEnemy2Skill01Time;
+
+    Coroutine enemy2Skill01Coroutine;
+    Vector2 enemy2Skill01DirCache = Vector2.right;
+
+    enum State { Idle, Chase, Attack, Cooldown, Enemy2Skill01Charging }
     State currentState = State.Idle;
 
     void Awake()
@@ -61,7 +77,16 @@ public class Enemy : MonoBehaviour
             case State.Cooldown:
                 UpdateCooldown();
                 break;
+            case State.Enemy2Skill01Charging:
+                UpdateEnemy2Skill01Charging();
+                break;
         }
+    }
+
+    void UpdateEnemy2Skill01Charging()
+    {
+        // 蓄力期间禁止移动
+        if (rb != null) rb.velocity = Vector2.zero;
     }
 
     void UpdateIdle()
@@ -71,6 +96,16 @@ public class Enemy : MonoBehaviour
         Vector2 myPos = transform.position;
         Vector2 targetPos = targetPlayer.position;
         float dist = Vector2.Distance(myPos, targetPos);
+
+        // 先尝试远程技能（给 enemy2 用）
+        if (TryCastEnemy2Skill01(dist, targetPos))
+        {
+            // 成功施放后保持待机朝向
+            Vector2 dir = (targetPos - myPos).normalized;
+            if (dir.sqrMagnitude > 0.0001f && spriteRenderer != null)
+                spriteRenderer.flipX = dir.x < 0f;
+            return;
+        }
 
         if (dist > attackDistance)
         {
@@ -112,6 +147,13 @@ public class Enemy : MonoBehaviour
         }
 
         float dist = Vector2.Distance(myPos, targetPos);
+
+        // 先尝试远程技能（给 enemy2 用）
+        if (TryCastEnemy2Skill01(dist, targetPos))
+        {
+            // 成功施放后本帧不再移动/近战
+            return;
+        }
 
         // 在攻击范围内
         if (dist <= attackDistance)
@@ -156,6 +198,106 @@ public class Enemy : MonoBehaviour
                     transform.position = nextPos;
             }
             // 如果没有替代路径，就停留在原地
+        }
+    }
+
+    /// <summary>
+    /// 尝试施放 enemy2 的射击技能 enemy2Skill01：
+    /// - 只在 useEnemy2Skill01=true 时生效
+    /// - 通过距离区间 + 冷却来决定是否释放
+    /// </summary>
+    bool TryCastEnemy2Skill01(float distanceToPlayer, Vector2 targetPos)
+    {
+        if (!useEnemy2Skill01)
+            return false;
+
+        if (Time.time < nextEnemy2Skill01Time)
+            return false;
+
+        if (distanceToPlayer < enemy2Skill01MinDistance || distanceToPlayer > enemy2Skill01MaxDistance)
+            return false;
+
+        if (enemy2Skill01Prefab == null || enemy2Skill01SpawnPoint == null)
+            return false;
+
+        // 进入蓄力：期间冻结不移动
+        nextEnemy2Skill01Time = Time.time + enemy2Skill01Cooldown;
+
+        Vector2 spawnPos = enemy2Skill01SpawnPoint.position;
+        enemy2Skill01DirCache = ((Vector2)targetPos - spawnPos);
+        if (enemy2Skill01DirCache.sqrMagnitude < 0.0001f)
+            enemy2Skill01DirCache = Vector2.right;
+        enemy2Skill01DirCache.Normalize();
+
+        // 启动蓄力协程（防止重复触发）
+        if (enemy2Skill01Coroutine == null)
+            enemy2Skill01Coroutine = StartCoroutine(Enemy2Skill01ChargeRoutine());
+
+        currentState = State.Enemy2Skill01Charging;
+
+        // 用 IsAttacking 驱动 enemy2.controller 的 Enemy2Attack 状态（你需要把它换成蓄力动画 Enemy2Skill01）
+        SetAnimState(idle: false, walk: false, attack: true);
+
+        if (rb != null) rb.velocity = Vector2.zero;
+        return true;
+    }
+
+    System.Collections.IEnumerator Enemy2Skill01ChargeRoutine()
+    {
+        yield return new WaitForSeconds(enemy2Skill01ChargeTime);
+
+        // 蓄力结束：发射技能
+        SpawnEnemy2Skill01(enemy2Skill01DirCache);
+
+        // 解除 IsAttacking，并切回追踪/待机
+        if (targetPlayer != null)
+        {
+            float distNow = Vector2.Distance(transform.position, targetPlayer.position);
+            if (distNow > attackDistance)
+            {
+                currentState = State.Chase;
+                SetAnimState(idle: false, walk: true, attack: false);
+            }
+            else
+            {
+                currentState = State.Idle;
+                SetAnimState(idle: true, walk: false, attack: false);
+            }
+        }
+        else
+        {
+            currentState = State.Idle;
+            SetAnimState(idle: true, walk: false, attack: false);
+        }
+
+        enemy2Skill01Coroutine = null;
+    }
+
+    void SpawnEnemy2Skill01(Vector2 dir)
+    {
+        if (enemy2Skill01Prefab == null || enemy2Skill01SpawnPoint == null)
+            return;
+
+        // 玩家若已离开技能范围，就不发射
+        if (targetPlayer != null)
+        {
+            float distNow = Vector2.Distance(transform.position, targetPlayer.position);
+            if (distNow < enemy2Skill01MinDistance || distNow > enemy2Skill01MaxDistance)
+                return;
+        }
+
+        Vector2 spawnPos = enemy2Skill01SpawnPoint.position;
+        if (dir.sqrMagnitude < 0.0001f) dir = Vector2.right;
+        dir.Normalize();
+
+        GameObject go = Instantiate(enemy2Skill01Prefab, spawnPos, Quaternion.identity);
+
+        Enemy2SkillProjectile proj = go.GetComponent<Enemy2SkillProjectile>();
+        if (proj != null)
+        {
+            float? speedOverride = enemy2Skill01SpeedOverride >= 0f ? (float?)enemy2Skill01SpeedOverride : null;
+            proj.Init(dir, speedOverride);
+            proj.damage = Mathf.RoundToInt(attackDamage * enemy2Skill01DamageMultiplier);
         }
     }
 
