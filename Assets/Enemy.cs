@@ -314,7 +314,8 @@ public class Enemy : MonoBehaviour
             }
         }
 
-        SpawnEnemy2Skill01(enemy2Skill01DirCache);
+        Vector2 targetPosNow = targetPlayer != null ? (Vector2)targetPlayer.position : (Vector2)transform.position;
+        SpawnEnemy2Skill01(targetPosNow);
 
         if (targetPlayer != null)
         {
@@ -339,22 +340,17 @@ public class Enemy : MonoBehaviour
         enemy2Skill01Coroutine = null;
     }
 
-    void SpawnEnemy2Skill01(Vector2 dir)
+    void SpawnEnemy2Skill01(Vector2 targetPosNow)
     {
         if (enemy2Skill01Prefab == null || enemy2Skill01SpawnPoint == null)
             return;
 
-        // 玩家若已离开技能范围，就不发射
-        if (targetPlayer != null)
-        {
-            float distNow = Vector2.Distance(transform.position, targetPlayer.position);
-            if (distNow < enemy2Skill01MinDistance || distNow > enemy2Skill01MaxDistance)
-                return;
-        }
+        // 玩家若已离开技能范围，就不发射（按释放瞬间的位置）
+        float distNow = Vector2.Distance(transform.position, targetPosNow);
+        if (distNow < enemy2Skill01MinDistance || distNow > enemy2Skill01MaxDistance)
+            return;
 
         Vector2 spawnPos = enemy2Skill01SpawnPoint.position;
-        if (dir.sqrMagnitude < 0.0001f) dir = Vector2.right;
-        dir.Normalize();
 
         GameObject go = Instantiate(enemy2Skill01Prefab, spawnPos, Quaternion.identity);
 
@@ -362,7 +358,7 @@ public class Enemy : MonoBehaviour
         if (proj != null)
         {
             float? speedOverride = enemy2Skill01SpeedOverride >= 0f ? (float?)enemy2Skill01SpeedOverride : null;
-            proj.Init(dir, speedOverride);
+            proj.InitToDestination(targetPosNow, speedOverride);
             proj.damage = Mathf.RoundToInt(attackDamage * enemy2Skill01DamageMultiplier);
         }
     }

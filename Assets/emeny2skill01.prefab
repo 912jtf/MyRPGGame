@@ -143,7 +143,7 @@ CircleCollider2D:
   m_UsedByComposite: 0
   m_Offset: {x: 0, y: -0.027010977}
   serializedVersion: 2
-  m_Radius: 0.53009254
+  m_Radius: 1
 --- !u!50 &4127082212850683680
 Rigidbody2D:
   serializedVersion: 4
@@ -185,5 +185,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   speed: 6
   damage: 1
-  lifeTime: 1.2
+  onlyDamageOnFinalFrame: 0
+  finalDamageWindow: 0.2
+  destroyAfterFinalDamageWindow: 0
+  useAoeDamageOnFinalFrame: 1
+  explosionRadius: 0.5300925
+  explosionCenterOffset: {x: 0, y: 0}
+  destroyImmediatelyAfterAoe: 0
+  destroyOnHit: 0
+  stopAtDestination: 0
+  lifeTime: 4
   playerTag: Player
