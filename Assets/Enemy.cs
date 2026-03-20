@@ -27,6 +27,8 @@ public class Enemy : MonoBehaviour
     [SerializeField] string idleBoolName = "IsIdle";
     [SerializeField] string walkBoolName = "IsWalking";
     [SerializeField] string attackBoolName = "IsAttacking";
+    [Tooltip("enemy2 专用：Animator 里新增 Bool「IsSkillCharging」，用于蓄力动画；近战仍用 IsAttacking → Enemy2Attack")]
+    [SerializeField] string skillChargingBoolName = "IsSkillCharging";
 
     Animator animator;
     Rigidbody2D rb;
@@ -59,6 +61,7 @@ public class Enemy : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         SetAnimState(idle: true, walk: false, attack: false);
+        SetSkillCharging(false);
     }
 
     void Update()
@@ -87,6 +90,21 @@ public class Enemy : MonoBehaviour
     {
         // 蓄力期间禁止移动
         if (rb != null) rb.velocity = Vector2.zero;
+
+        if (targetPlayer == null) return;
+
+        float dist = Vector2.Distance(transform.position, targetPlayer.position);
+        // 玩家进入近战范围：立刻打断蓄力，改打近战
+        if (dist <= attackDistance)
+        {
+            InterruptEnemy2Skill01ForMelee();
+        }
+        else
+        {
+            Vector2 dir = (Vector2)targetPlayer.position - (Vector2)transform.position;
+            if (dir.sqrMagnitude > 0.0001f && spriteRenderer != null)
+                spriteRenderer.flipX = dir.x < 0f;
+        }
     }
 
     void UpdateIdle()
@@ -97,15 +115,9 @@ public class Enemy : MonoBehaviour
         Vector2 targetPos = targetPlayer.position;
         float dist = Vector2.Distance(myPos, targetPos);
 
-        // 先尝试远程技能（给 enemy2 用）
+        // 先尝试远程技能（仅在中远距离；近战优先下面逻辑）
         if (TryCastEnemy2Skill01(dist, targetPos))
-        {
-            // 成功施放后保持待机朝向
-            Vector2 dir = (targetPos - myPos).normalized;
-            if (dir.sqrMagnitude > 0.0001f && spriteRenderer != null)
-                spriteRenderer.flipX = dir.x < 0f;
             return;
-        }
 
         if (dist > attackDistance)
         {
@@ -148,12 +160,9 @@ public class Enemy : MonoBehaviour
 
         float dist = Vector2.Distance(myPos, targetPos);
 
-        // 先尝试远程技能（给 enemy2 用）
+        // 先尝试远程技能（仅在中远距离；若已在近战范围则追上去打近战）
         if (TryCastEnemy2Skill01(dist, targetPos))
-        {
-            // 成功施放后本帧不再移动/近战
             return;
-        }
 
         // 在攻击范围内
         if (dist <= attackDistance)
@@ -214,6 +223,10 @@ public class Enemy : MonoBehaviour
         if (Time.time < nextEnemy2Skill01Time)
             return false;
 
+        // 在近战范围内不放技能（避免与近战抢 IsAttacking / 避免贴脸蓄力卡住）
+        if (distanceToPlayer <= attackDistance)
+            return false;
+
         if (distanceToPlayer < enemy2Skill01MinDistance || distanceToPlayer > enemy2Skill01MaxDistance)
             return false;
 
@@ -235,21 +248,74 @@ public class Enemy : MonoBehaviour
 
         currentState = State.Enemy2Skill01Charging;
 
-        // 用 IsAttacking 驱动 enemy2.controller 的 Enemy2Attack 状态（你需要把它换成蓄力动画 Enemy2Skill01）
-        SetAnimState(idle: false, walk: false, attack: true);
+        // 蓄力用 IsSkillCharging；近战仍用 IsAttacking → Enemy2Attack
+        SetAnimState(idle: false, walk: false, attack: false);
+        SetSkillCharging(true);
 
         if (rb != null) rb.velocity = Vector2.zero;
         return true;
+    }
+
+    /// <summary>
+    /// 蓄力被打断：停止协程，关闭蓄力动画，优先接近战。
+    /// </summary>
+    void InterruptEnemy2Skill01ForMelee()
+    {
+        if (enemy2Skill01Coroutine != null)
+        {
+            StopCoroutine(enemy2Skill01Coroutine);
+            enemy2Skill01Coroutine = null;
+        }
+
+        SetSkillCharging(false);
+
+        // 被打断后给技能较短冷却，避免刚打完近战又立刻原地蓄力
+        nextEnemy2Skill01Time = Time.time + Mathf.Max(0.35f, enemy2Skill01Cooldown * 0.25f);
+
+        if (Time.time >= nextAttackTime)
+        {
+            StartAttack();
+        }
+        else
+        {
+            currentState = State.Cooldown;
+            SetAnimState(idle: true, walk: false, attack: false);
+        }
     }
 
     System.Collections.IEnumerator Enemy2Skill01ChargeRoutine()
     {
         yield return new WaitForSeconds(enemy2Skill01ChargeTime);
 
-        // 蓄力结束：发射技能
+        // 被打断时状态已变，协程应已 Stop；这里再保险判断一次
+        if (currentState != State.Enemy2Skill01Charging)
+        {
+            enemy2Skill01Coroutine = null;
+            yield break;
+        }
+
+        SetSkillCharging(false);
+
+        // 蓄力结束：若玩家已贴脸则不打弹丸，直接近战
+        if (targetPlayer != null)
+        {
+            float distNow = Vector2.Distance(transform.position, targetPlayer.position);
+            if (distNow <= attackDistance)
+            {
+                enemy2Skill01Coroutine = null;
+                if (Time.time >= nextAttackTime)
+                    StartAttack();
+                else
+                {
+                    currentState = State.Cooldown;
+                    SetAnimState(idle: true, walk: false, attack: false);
+                }
+                yield break;
+            }
+        }
+
         SpawnEnemy2Skill01(enemy2Skill01DirCache);
 
-        // 解除 IsAttacking，并切回追踪/待机
         if (targetPlayer != null)
         {
             float distNow = Vector2.Distance(transform.position, targetPlayer.position);
@@ -345,6 +411,7 @@ public class Enemy : MonoBehaviour
     {
         currentState = State.Attack;
         nextAttackTime = Time.time + attackCooldown;
+        SetSkillCharging(false);
         SetAnimState(idle: false, walk: false, attack: true);
         if (rb != null) rb.velocity = Vector2.zero;
     }
@@ -360,6 +427,27 @@ public class Enemy : MonoBehaviour
         if (!string.IsNullOrEmpty(attackBoolName))
             animator.SetBool(attackBoolName, attack);
     }
+
+    void SetSkillCharging(bool on)
+    {
+        if (animator == null || string.IsNullOrEmpty(skillChargingBoolName))
+            return;
+        if (!HasAnimatorBool(skillChargingBoolName))
+            return;
+        animator.SetBool(skillChargingBoolName, on);
+    }
+
+    static bool HasAnimatorBool(Animator anim, string paramName)
+    {
+        foreach (AnimatorControllerParameter p in anim.parameters)
+        {
+            if (p.type == AnimatorControllerParameterType.Bool && p.name == paramName)
+                return true;
+        }
+        return false;
+    }
+
+    bool HasAnimatorBool(string paramName) => animator != null && HasAnimatorBool(animator, paramName);
 
     // 索敌 Trigger：需要将其中一个 Collider2D 勾选 IsTrigger
     void OnTriggerEnter2D(Collider2D other)

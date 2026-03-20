@@ -32,10 +32,11 @@ Transform:
   m_GameObject: {fileID: 6754537915923992103}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 4.12, y: -2.23, z: 0}
+  m_LocalPosition: {x: 4.101, y: -2.185, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 8565366644048074121}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &7992238267639363088
@@ -231,14 +232,16 @@ MonoBehaviour:
   idleBoolName: IsIdle
   walkBoolName: IsWalking
   attackBoolName: IsAttacking
+  skillChargingBoolName: IsSkillCharging
   useEnemy2Skill01: 1
   enemy2Skill01Prefab: {fileID: 130034253271366145, guid: 1d43f635acb7bba4886222c6def3812e, type: 3}
-  enemy2Skill01SpawnPoint: {fileID: 3931880303832316686, guid: b4c166e08ed04df45aa932105c064ef9, type: 3}
+  enemy2Skill01SpawnPoint: {fileID: 8565366644048074121}
   enemy2Skill01Cooldown: 2.5
   enemy2Skill01MinDistance: 3
   enemy2Skill01MaxDistance: 8
   enemy2Skill01SpeedOverride: -1
   enemy2Skill01DamageMultiplier: 2
+  enemy2Skill01ChargeTime: 0.5
 --- !u!114 &1396911580945578790
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -256,3 +259,34 @@ MonoBehaviour:
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
   enemyIcon: {fileID: 1553159203, guid: 74d78ac966fbe3a4f81282e260209e37, type: 3}
+--- !u!1 &7345230727590300570
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8565366644048074121}
+  m_Layer: 6
+  m_Name: SkillSpawn
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8565366644048074121
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7345230727590300570}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.66, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2651961381199247299}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
