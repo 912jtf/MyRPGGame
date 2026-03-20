@@ -258,4 +258,5 @@ MonoBehaviour:
   expReward: 1
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
-  enemyIcon: {fileID: 21300000, guid: 8df698b9395458d43ab1e9d44af0faf1, type: 3}
+  enemyIcon: {fileID: -1860057227, guid: 350d4254a498f1c4eb3548401b17acdb, type: 3}
+  enemyIconSizeMultiplier: 3

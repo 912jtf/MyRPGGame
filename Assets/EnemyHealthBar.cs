@@ -21,6 +21,12 @@ public class EnemyHealthBar : MonoBehaviour
     [Tooltip("血量文字（显示如 3/5）")]
     public TextMeshProUGUI healthText;
 
+    [Header("Enemy Icon Resize")]
+    [Tooltip("当切换不同敌人图标时，是否把 enemyIcon 的 RectTransform 自动调整为 Sprite 原生大小。")]
+    public bool resizeIconToSpriteNativeSize = true;
+    [Tooltip("在原生大小基础上再乘一个倍数，用于统一视觉大小（全局）。如你已在 EnemyHealth 里设置了每个敌人的倍数，可以保持为 1。")]
+    public float enemyIconSizeMultiplier = 1f;
+
     private float currentHealth;
     private float maxHealth;
     private EnemyHealth currentEnemy;
@@ -125,7 +131,7 @@ public class EnemyHealthBar : MonoBehaviour
             // 更新新敌人的图标
             if (enemy != null && enemy.enemyIcon != null)
             {
-                SetEnemyIcon(enemy.enemyIcon);
+                SetEnemyIcon(enemy.enemyIcon, enemy.enemyIconSizeMultiplier);
             }
         }
 
@@ -148,11 +154,27 @@ public class EnemyHealthBar : MonoBehaviour
     /// <summary>
     /// 设置敌人头像
     /// </summary>
-    public void SetEnemyIcon(Sprite icon)
+    public void SetEnemyIcon(Sprite icon, float perEnemyIconMultiplier = 1f)
     {
         if (enemyIcon != null)
         {
             enemyIcon.sprite = icon;
+
+            if (resizeIconToSpriteNativeSize && icon != null)
+            {
+                // SetNativeSize 会把 RectTransform sizeDelta 改成 Sprite 的“原生显示大小”
+                enemyIcon.SetNativeSize();
+
+                float finalMultiplier = enemyIconSizeMultiplier * perEnemyIconMultiplier;
+                if (finalMultiplier != 1f)
+                {
+                    RectTransform rt = enemyIcon.rectTransform;
+                    if (rt != null)
+                    {
+                        rt.sizeDelta *= finalMultiplier;
+                    }
+                }
+            }
         }
     }
 

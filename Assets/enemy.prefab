@@ -259,3 +259,4 @@ MonoBehaviour:
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
   enemyIcon: {fileID: -2136839404, guid: bc372fdc8e6abf24f84d881459cfec70, type: 3}
+  enemyIconSizeMultiplier: 0.55

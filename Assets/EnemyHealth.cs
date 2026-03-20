@@ -17,6 +17,9 @@ public class EnemyHealth : MonoBehaviour
     [Tooltip("敌人的头像图片，用于在血量条中显示")]
     public Sprite enemyIcon;
 
+    [Tooltip("血量条头像显示放大倍数（只影响 UI 显示大小，不影响世界中的敌人）。")]
+    public float enemyIconSizeMultiplier = 1f;
+
     private EnemyHealthBar enemyHealthBar;
     private bool healthBarInitialized = false;
 

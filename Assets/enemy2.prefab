@@ -260,6 +260,7 @@ MonoBehaviour:
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
   enemyIcon: {fileID: 1553159203, guid: 74d78ac966fbe3a4f81282e260209e37, type: 3}
+  enemyIconSizeMultiplier: 0.5
 --- !u!1 &7345230727590300570
 GameObject:
   m_ObjectHideFlags: 0
