@@ -1,5 +1,7 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 
 public class PlayerHealth : MonoBehaviour
 {
@@ -14,9 +16,17 @@ public class PlayerHealth : MonoBehaviour
     public Color hurtColor = Color.red;
     public float hurtFlashTime = 0.1f;
 
+    [Header("事件（可选）")]
+    public UnityEvent onPlayerDied;
+
+    public float CurrentHealth => currentHealth;
+    public bool IsDead => _isDead;
+    public event Action Died;
+
     private float currentHealth;
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
+    private bool _isDead;
 
     private void Awake()
     {
@@ -55,6 +65,9 @@ public class PlayerHealth : MonoBehaviour
 
     public void TakeDamage(float damage)
     {
+        if (_isDead || damage <= 0f)
+            return;
+
         currentHealth -= damage;
         if (currentHealth < 0)
             currentHealth = 0;
@@ -100,8 +113,14 @@ public class PlayerHealth : MonoBehaviour
 
     private void Die()
     {
+        if (_isDead)
+            return;
+        _isDead = true;
+
         // TODO: 播放死亡动画 / 复活逻辑等
         Debug.Log("Player died.");
+        Died?.Invoke();
+        onPlayerDied?.Invoke();
     }
 
     /// <summary>
@@ -110,7 +129,7 @@ public class PlayerHealth : MonoBehaviour
     /// <param name="amount">回复量（正数有效）</param>
     public void Heal(float amount)
     {
-        if (amount <= 0) return;
+        if (_isDead || amount <= 0) return;
 
         currentHealth += amount;
         if (currentHealth > maxHealth)
