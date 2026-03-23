@@ -78,7 +78,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 10
   m_Sprite: {fileID: -2136839404, guid: bc372fdc8e6abf24f84d881459cfec70, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -233,6 +233,9 @@ MonoBehaviour:
   attackBoolName: IsAttacking
   skillChargingBoolName: IsSkillCharging
   invertFacing: 0
+  hitKnockbackDistance: 0.45
+  hitKnockbackDuration: 0.1
+  hitStunDuration: 0.2
   useEnemy2Skill01: 0
   enemy2Skill01Prefab: {fileID: 0}
   enemy2Skill01SpawnPoint: {fileID: 0}

@@ -120,6 +120,11 @@ public class EnemyHealth : MonoBehaviour
 
     public void TakeDamage(float damage)
     {
+        TakeDamage(damage, transform.position);
+    }
+
+    public void TakeDamage(float damage, Vector2 hitSourceWorldPos)
+    {
         Debug.Log($"[EnemyHealth.TakeDamage] 敌人 {gameObject.name} 受到伤害 {damage}，当前血量 {currentHealth} → {currentHealth - damage}");
         
         // 首次受伤时初始化血量条（确保所有物体都已初始化）
@@ -141,6 +146,12 @@ public class EnemyHealth : MonoBehaviour
             spriteRenderer.color = hurtColor;
             CancelInvoke(nameof(ResetColor));
             Invoke(nameof(ResetColor), hurtFlashTime);
+        }
+
+        Enemy enemy = GetComponent<Enemy>();
+        if (enemy != null)
+        {
+            enemy.ApplyHitReaction(hitSourceWorldPos);
         }
 
         // 更新血量条 UI（首次受伤时显示）

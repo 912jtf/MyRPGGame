@@ -189,7 +189,7 @@ public class PlayerAttack : MonoBehaviour
             return false;
 
         float dmg = ComputeDamage();
-        enemyHealth.TakeDamage(dmg);
+        enemyHealth.TakeDamage(dmg, transform.position);
         return true;
     }
 
@@ -236,7 +236,7 @@ public class PlayerAttack : MonoBehaviour
 
             EnemyHealth enemyHealth = enemyCollider.GetComponent<EnemyHealth>();
             if (enemyHealth != null)
-                enemyHealth.TakeDamage(ComputeDamage());
+                enemyHealth.TakeDamage(ComputeDamage(), transform.position);
         }
     }
 

@@ -17,6 +17,22 @@ public class Enemy : MonoBehaviour
     public float attackDistance = 0.8f;   // 用于 AI 判断是否应该进入攻击状态
     public float attackRadius = 0.8f;     // 实际伤害判定半径（OverlapCircleAll）
     public float attackCooldown = 0.8f;   // 两次攻击之间的冷却时间（秒）
+    public float mineAttackDistance = 0.9f;
+
+    [Header("目标优先级")]
+    [Tooltip("玩家进入该范围后，敌人会从矿点切换为追击玩家。")]
+    public float playerAggroRange = 3.5f;
+    [Tooltip("玩家超出该范围后，敌人会放弃追击并回到矿点。")]
+    public float loseAggroRange = 6f;
+
+    [Header("金矿目标")]
+    public GoldMineController goldMine;
+    [Tooltip("可选：用于记录敌人 ID。不填则自动使用实例 ID。")]
+    public string enemyIdOverride;
+    [Tooltip("偷矿成功后生成的金块预制体（应挂 GoldPickup）。")]
+    public GameObject stolenGoldPickupPrefab;
+    [Tooltip("偷矿成功后金块在敌人附近散落半径。")]
+    public float stolenGoldDropScatter = 0.35f;
 
     [Header("伤害设置")]
     public LayerMask playerLayer;         // 只勾选 Player 层
@@ -34,6 +50,14 @@ public class Enemy : MonoBehaviour
     [Tooltip("用于修正精灵初始朝向是否反了。勾上后，所有 flipX 逻辑会反向。")]
     public bool invertFacing = false;
 
+    [Header("受击反应")]
+    [Tooltip("每次受击后向远离攻击源方向击退的距离（世界单位）")]
+    public float hitKnockbackDistance = 0.45f;
+    [Tooltip("击退持续时间（秒）")]
+    public float hitKnockbackDuration = 0.1f;
+    [Tooltip("受击僵直时间（秒）")]
+    public float hitStunDuration = 0.2f;
+
     Animator animator;
     Rigidbody2D rb;
     SpriteRenderer spriteRenderer;
@@ -42,7 +66,9 @@ public class Enemy : MonoBehaviour
     readonly RaycastHit2D[] castHits = new RaycastHit2D[8];
 
     Transform targetPlayer;   // 索敌到的玩家
+    Transform mineTarget;
     float nextAttackTime;     // 下次允许攻击的时间
+    AttackTargetType currentAttackTarget = AttackTargetType.None;
 
     [Header("enemy2 远程技能（射出去）")]
     [Tooltip("只给 enemy2 打开，其他敌人保持关闭")]
@@ -61,7 +87,11 @@ public class Enemy : MonoBehaviour
     Vector2 enemy2Skill01DirCache = Vector2.right;
 
     enum State { Idle, Chase, Attack, Cooldown, Enemy2Skill01Charging }
+    enum AttackTargetType { None, Player, Mine }
     State currentState = State.Idle;
+    float _hitStunEndTime;
+    Vector2 _knockbackDir;
+    float _knockbackSpeed;
 
     void Awake()
     {
@@ -85,10 +115,16 @@ public class Enemy : MonoBehaviour
 
         SetAnimState(idle: true, walk: false, attack: false);
         SetSkillCharging(false);
+        ResolveMineTarget();
     }
 
     void Update()
     {
+        UpdateTargetSelection();
+
+        if (HandleHitStunAndKnockback())
+            return;
+
         switch (currentState)
         {
             case State.Idle:
@@ -107,6 +143,55 @@ public class Enemy : MonoBehaviour
                 UpdateEnemy2Skill01Charging();
                 break;
         }
+    }
+
+    bool HandleHitStunAndKnockback()
+    {
+        if (Time.time >= _hitStunEndTime)
+            return false;
+
+        float dt = Time.deltaTime;
+        float remain = _hitStunEndTime - Time.time;
+        float moveStep = 0f;
+        if (hitKnockbackDuration > 0f && _knockbackSpeed > 0f)
+            moveStep = _knockbackSpeed * Mathf.Min(dt, remain);
+
+        if (moveStep > 0f)
+        {
+            Vector2 myPos = rb != null ? rb.position : (Vector2)transform.position;
+            if (!IsPathBlocked(myPos, _knockbackDir, moveStep))
+            {
+                Vector2 nextPos = myPos + _knockbackDir * moveStep;
+                if (rb != null) rb.MovePosition(nextPos);
+                else transform.position = nextPos;
+            }
+        }
+
+        if (rb != null) rb.velocity = Vector2.zero;
+        return true;
+    }
+
+    public void ApplyHitReaction(Vector2 hitSourceWorldPos)
+    {
+        Vector2 selfPos = rb != null ? rb.position : (Vector2)transform.position;
+        Vector2 away = selfPos - hitSourceWorldPos;
+        if (away.sqrMagnitude < 0.0001f)
+            away = spriteRenderer != null && spriteRenderer.flipX ? Vector2.right : Vector2.left;
+        _knockbackDir = away.normalized;
+
+        float kbDuration = Mathf.Max(0f, hitKnockbackDuration);
+        _knockbackSpeed = kbDuration > 0f ? Mathf.Max(0f, hitKnockbackDistance) / kbDuration : 0f;
+        _hitStunEndTime = Mathf.Max(_hitStunEndTime, Time.time + Mathf.Max(0f, hitStunDuration));
+
+        if (enemy2Skill01Coroutine != null)
+        {
+            StopCoroutine(enemy2Skill01Coroutine);
+            enemy2Skill01Coroutine = null;
+        }
+        SetSkillCharging(false);
+        currentState = State.Cooldown;
+        SetAnimState(idle: true, walk: false, attack: false);
+        if (rb != null) rb.velocity = Vector2.zero;
     }
 
     void UpdateEnemy2Skill01Charging()
@@ -132,7 +217,28 @@ public class Enemy : MonoBehaviour
 
     void UpdateIdle()
     {
-        if (targetPlayer == null) return;
+        // 无玩家目标：回矿点
+        if (targetPlayer == null)
+        {
+            if (HasValidMineTarget())
+            {
+                float mineDist = Vector2.Distance(transform.position, mineTarget.position);
+                if (mineDist > mineAttackDistance)
+                {
+                    currentState = State.Chase;
+                    SetAnimState(idle: false, walk: true, attack: false);
+                }
+                else if (Time.time >= nextAttackTime)
+                {
+                    StartMineAttack();
+                }
+                else
+                {
+                    SetAnimState(idle: true, walk: false, attack: false);
+                }
+            }
+            return;
+        }
 
         Vector2 myPos = transform.position;
         Vector2 targetPos = targetPlayer.position;
@@ -166,8 +272,52 @@ public class Enemy : MonoBehaviour
     {
         if (targetPlayer == null)
         {
-            currentState = State.Idle;
-            SetAnimState(idle: true, walk: false, attack: false);
+            // 无玩家目标时，改为追矿点
+            if (!HasValidMineTarget())
+            {
+                currentState = State.Idle;
+                SetAnimState(idle: true, walk: false, attack: false);
+                return;
+            }
+
+            Vector2 myPosMine = rb != null ? rb.position : (Vector2)transform.position;
+            Vector2 minePos = mineTarget.position;
+            Vector2 mineDir = (minePos - myPosMine).normalized;
+
+            if (mineDir.sqrMagnitude > 0.0001f && spriteRenderer != null)
+                spriteRenderer.flipX = (mineDir.x < 0f) ^ invertFacing;
+
+            float mineDist = Vector2.Distance(myPosMine, minePos);
+            if (mineDist <= mineAttackDistance)
+            {
+                if (Time.time >= nextAttackTime)
+                    StartMineAttack();
+                else
+                {
+                    currentState = State.Cooldown;
+                    SetAnimState(idle: true, walk: false, attack: false);
+                    if (rb != null) rb.velocity = Vector2.zero;
+                }
+                return;
+            }
+
+            float moveDistanceToMine = moveSpeed * Time.deltaTime;
+            Vector2 nextPosToMine = myPosMine + mineDir * moveDistanceToMine;
+            if (!IsPathBlocked(myPosMine, mineDir, moveDistanceToMine))
+            {
+                if (rb != null) rb.MovePosition(nextPosToMine);
+                else transform.position = nextPosToMine;
+            }
+            else
+            {
+                Vector2 altMineDir = FindAlternativePath(myPosMine, mineDir, minePos, moveDistanceToMine);
+                if (altMineDir != Vector2.zero)
+                {
+                    nextPosToMine = myPosMine + altMineDir * moveDistanceToMine;
+                    if (rb != null) rb.MovePosition(nextPosToMine);
+                    else transform.position = nextPosToMine;
+                }
+            }
             return;
         }
 
@@ -230,7 +380,20 @@ public class Enemy : MonoBehaviour
                 else
                     transform.position = nextPos;
             }
-            // 如果没有替代路径，就停留在原地
+            else
+            {
+                // 没有左右绕过路径时，尝试向后退一步作为解卡。
+                Vector2 backDir = -dir;
+                if (!IsPathBlocked(myPos, backDir, moveDistance))
+                {
+                    nextPos = myPos + backDir * moveDistance;
+                    if (rb != null)
+                        rb.MovePosition(nextPos);
+                    else
+                        transform.position = nextPos;
+                }
+                // 仍被挡住：停留原地（下一帧继续尝试）
+            }
         }
     }
 
@@ -391,6 +554,26 @@ public class Enemy : MonoBehaviour
     {
         if (targetPlayer == null)
         {
+            if (HasValidMineTarget())
+            {
+                float mineDist = Vector2.Distance(transform.position, mineTarget.position);
+                if (Time.time >= nextAttackTime)
+                {
+                    if (mineDist <= mineAttackDistance) StartMineAttack();
+                    else
+                    {
+                        currentState = State.Chase;
+                        SetAnimState(idle: false, walk: true, attack: false);
+                    }
+                }
+                else
+                {
+                    if (rb != null) rb.velocity = Vector2.zero;
+                    SetAnimState(idle: true, walk: false, attack: false);
+                }
+                return;
+            }
+
             currentState = State.Idle;
             SetAnimState(idle: true, walk: false, attack: false);
             return;
@@ -430,6 +613,17 @@ public class Enemy : MonoBehaviour
     void StartAttack()
     {
         currentState = State.Attack;
+        currentAttackTarget = AttackTargetType.Player;
+        nextAttackTime = Time.time + attackCooldown;
+        SetSkillCharging(false);
+        SetAnimState(idle: false, walk: false, attack: true);
+        if (rb != null) rb.velocity = Vector2.zero;
+    }
+
+    void StartMineAttack()
+    {
+        currentState = State.Attack;
+        currentAttackTarget = AttackTargetType.Mine;
         nextAttackTime = Time.time + attackCooldown;
         SetSkillCharging(false);
         SetAnimState(idle: false, walk: false, attack: true);
@@ -472,12 +666,15 @@ public class Enemy : MonoBehaviour
     // 索敌 Trigger：需要将其中一个 Collider2D 勾选 IsTrigger
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (targetPlayer != null) return;
         if (other.CompareTag("Player"))
             targetPlayer = other.transform;
     }
 
-    // 已删除 OnTriggerExit2D：敌人一旦发现玩家就永远追逐，不会因离开索敌范围而放弃目标
+    void OnTriggerExit2D(Collider2D other)
+    {
+        if (targetPlayer != null && other.transform == targetPlayer)
+            targetPlayer = null;
+    }
 
     // ===== Animation Event =====
 
@@ -487,22 +684,24 @@ public class Enemy : MonoBehaviour
     /// </summary>
     public void OnAttackHit()
     {
+        if (currentAttackTarget == AttackTargetType.Mine)
+        {
+            if (HasValidMineTarget() && Vector2.Distance(transform.position, mineTarget.position) <= mineAttackDistance + 0.25f)
+            {
+                bool stole = goldMine.TryStealByEnemy(GetEnemyId());
+                if (stole)
+                    SpawnStolenGoldPickup();
+            }
+            return;
+        }
+
         // 以敌人当前位置为圆心进行范围检测
         Vector2 center = transform.position;
-
-        Collider2D[] hitPlayers = Physics2D.OverlapCircleAll(
-            center,
-            attackRadius,
-            playerLayer
-        );
-
+        Collider2D[] hitPlayers = Physics2D.OverlapCircleAll(center, attackRadius, playerLayer);
         foreach (Collider2D col in hitPlayers)
         {
             PlayerHealth ph = col.GetComponent<PlayerHealth>();
-            if (ph != null)
-            {
-                ph.TakeDamage(attackDamage);
-            }
+            if (ph != null) ph.TakeDamage(attackDamage);
         }
     }
 
@@ -514,6 +713,8 @@ public class Enemy : MonoBehaviour
     /// </summary>
     public void OnAttackEnd()
     {
+        currentAttackTarget = AttackTargetType.None;
+
         if (targetPlayer != null)
         {
             float dist = Vector2.Distance(transform.position, targetPlayer.position);
@@ -538,11 +739,29 @@ public class Enemy : MonoBehaviour
                 SetAnimState(idle: false, walk: true, attack: false);
             }
         }
-        else
+
+        if (HasValidMineTarget())
         {
-            currentState = State.Idle;
-            SetAnimState(idle: true, walk: false, attack: false);
+            float mineDist = Vector2.Distance(transform.position, mineTarget.position);
+            if (mineDist <= mineAttackDistance)
+            {
+                if (Time.time >= nextAttackTime) StartMineAttack();
+                else
+                {
+                    currentState = State.Cooldown;
+                    SetAnimState(idle: true, walk: false, attack: false);
+                }
+            }
+            else
+            {
+                currentState = State.Chase;
+                SetAnimState(idle: false, walk: true, attack: false);
+            }
+            return;
         }
+
+        currentState = State.Idle;
+        SetAnimState(idle: true, walk: false, attack: false);
     }
 
     /// <summary>
@@ -559,13 +778,23 @@ public class Enemy : MonoBehaviour
             return hit.collider != null;
         }
 
-        float castDist = Mathf.Max(distance, 0.001f) + 0.08f;
+        // cast 的起点可能会“贴在一起”（尤其是 Kinematic / 靠墙），
+        // Unity 可能会把距离接近 0 的命中也算进去，导致永远判定被挡而卡死。
+        // 通过缩小额外距离 + 忽略距离接近 0 的命中来缓解。
+        float skin = 0.02f;
+        float castDist = Mathf.Max(distance, 0.001f) + skin;
         int count = bodyCollider.Cast(direction, pathBlockFilter, castHits, castDist);
         for (int i = 0; i < count; i++)
         {
-            Collider2D c = castHits[i].collider;
+            RaycastHit2D hit = castHits[i];
+            Collider2D c = hit.collider;
             if (c == null || c.isTrigger) continue;
             if (c.gameObject == gameObject) continue;
+
+            // 忽略“从起点贴合碰撞体”导致的距离为 0 命中
+            if (hit.distance <= 0.001f)
+                continue;
+
             return true;
         }
 
@@ -619,5 +848,77 @@ public class Enemy : MonoBehaviour
         // 在 Scene 视图中显示敌人的攻击判定范围 测试
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, attackRadius);
+
+        Gizmos.color = new Color(1f, 0.6f, 0.1f, 0.85f);
+        Gizmos.DrawWireSphere(transform.position, mineAttackDistance);
+
+        Gizmos.color = new Color(0.2f, 0.8f, 1f, 0.6f);
+        Gizmos.DrawWireSphere(transform.position, playerAggroRange);
+    }
+
+    void ResolveMineTarget()
+    {
+        if (goldMine == null)
+            goldMine = FindObjectOfType<GoldMineController>();
+        mineTarget = goldMine != null ? goldMine.transform : null;
+    }
+
+    bool HasValidMineTarget()
+    {
+        if (goldMine == null || mineTarget == null)
+            ResolveMineTarget();
+        return goldMine != null && mineTarget != null && !goldMine.IsDepleted;
+    }
+
+    void UpdateTargetSelection()
+    {
+        if (targetPlayer != null)
+        {
+            float dist = Vector2.Distance(transform.position, targetPlayer.position);
+            if (dist > loseAggroRange)
+                targetPlayer = null;
+            return;
+        }
+
+        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
+        if (players == null || players.Length == 0)
+            return;
+
+        float bestSqr = playerAggroRange * playerAggroRange;
+        Transform best = null;
+        Vector2 self = transform.position;
+        foreach (GameObject player in players)
+        {
+            if (player == null) continue;
+            float sqr = ((Vector2)player.transform.position - self).sqrMagnitude;
+            if (sqr <= bestSqr)
+            {
+                bestSqr = sqr;
+                best = player.transform;
+            }
+        }
+
+        if (best != null)
+            targetPlayer = best;
+    }
+
+    string GetEnemyId()
+    {
+        if (!string.IsNullOrWhiteSpace(enemyIdOverride))
+            return enemyIdOverride;
+        return $"{name}_{GetInstanceID()}";
+    }
+
+    void SpawnStolenGoldPickup()
+    {
+        if (stolenGoldPickupPrefab == null)
+            return;
+
+        Vector2 offset = UnityEngine.Random.insideUnitCircle * Mathf.Max(0f, stolenGoldDropScatter);
+        Vector2 spawnPos = (Vector2)transform.position + offset;
+        GameObject go = Instantiate(stolenGoldPickupPrefab, spawnPos, Quaternion.identity);
+        GoldPickup pickup = go.GetComponent<GoldPickup>();
+        if (pickup != null)
+            pickup.amount = Mathf.Max(1, pickup.amount);
     }
 }
