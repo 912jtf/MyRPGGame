@@ -224,10 +224,40 @@ MonoBehaviour:
   attackDistance: 1
   attackRadius: 0.8
   attackCooldown: 1.4
+  mineAttackDistance: 0.9
+  playerAggroRange: 3.5
+  loseAggroRange: 6
+  goldMine: {fileID: 4546663217882423377, guid: 54069dd54202be146b2f4232eed7ae7b, type: 3}
+  fallbackMineObjectName: GoldMine_Active
+  enemyIdOverride: 
+  stolenGoldPickupPrefab: {fileID: 7173932451251563590, guid: 377656ca624667344845d511b0767997, type: 3}
+  stolenGoldFallbackSprite: {fileID: 0}
+  stolenGoldDropScatter: 0.35
+  mineAttackHitPadding: 0.8
+  mineAttackFallbackHitDelay: 0.2
+  mineAttackFallbackEndDelay: 0.55
+  carryStolenGold: 1
+  carriedGoldAttachPoint: {fileID: 0}
+  carriedGoldLocalOffset: {x: 0, y: 0.25}
+  roamBoundsCollider: {fileID: 9047777351764751487, guid: fded5d2630d811940a5980343c01f1e0, type: 3}
+  roamDirectionChangeInterval: 3
+  roamObstacleResolveCooldown: 0.25
+  roamStuckDuration: 0.35
+  fleeMinDistanceFromMine: 2
+  fleeMaxDuration: 15
+  debugMineAI: 1
+  debugLogInterval: 0.5
+  debugSelectDepletedMineOnSwitch: 1
   playerLayer:
     serializedVersion: 2
     m_Bits: 128
   attackDamage: 0.5
+  debugPathBlocked: 1
+  debugPathBlockedLogInterval: 0.5
+  debugFleeBlockSummary: 1
+  debugFleeBlockSummaryLogInterval: 1
+  debugRoamBlockHit: 1
+  debugRoamBlockHitLogInterval: 0.2
   idleBoolName: IsIdle
   walkBoolName: IsWalking
   attackBoolName: IsAttacking

@@ -32,6 +32,10 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("同一时间场景中允许存在的敌人最大数量（0 或负数表示不限制）")]
     public int maxEnemies = 0;
 
+    [Header("金矿引用（可选）")]
+    [Tooltip("给刷出来的敌人注入同一个金矿控制器。留空时运行时自动查找。")]
+    public GoldMineController goldMine;
+
     [Header("出生点检测（避免卡墙 / 与其它野怪重叠）")]
     [Tooltip("会阻挡走路的层（如建筑、墙、障碍），生成时避开这些碰撞体")]
     public LayerMask obstacleLayers;
@@ -67,11 +71,16 @@ public class EnemySpawner : MonoBehaviour
                 player = p.transform;
             }
         }
+
+        if (goldMine == null)
+            goldMine = FindObjectOfType<GoldMineController>();
     }
 
     private void Update()
     {
         if (enemyPrefabs == null || enemyPrefabs.Length == 0) return;
+        if (goldMine == null)
+            goldMine = FindObjectOfType<GoldMineController>();
 
         // 联机模式下 PlayerNet 是在点击 Host / Client 后由 NetworkManager 动态生成的，
         // 因此 Start 时场景里还没有 Tag=Player 的物体。
@@ -130,11 +139,30 @@ public class EnemySpawner : MonoBehaviour
 
             if (!blockedByObstacle && !blockedByEnemy)
             {
-                Instantiate(selectedPrefab, finalPos, Quaternion.identity);
+                GameObject go = Instantiate(selectedPrefab, finalPos, Quaternion.identity);
+                BindMineForSpawnedEnemy(go);
                 return;
             }
         }
         // 多次尝试仍无空地，本帧不生成
+    }
+
+    void BindMineForSpawnedEnemy(GameObject enemyObj)
+    {
+        if (enemyObj == null)
+            return;
+
+        Enemy enemy = enemyObj.GetComponent<Enemy>();
+        if (enemy == null)
+            enemy = enemyObj.GetComponentInChildren<Enemy>();
+        if (enemy == null)
+            return;
+
+        if (goldMine == null)
+            goldMine = FindObjectOfType<GoldMineController>();
+
+        if (enemy.goldMine == null && goldMine != null)
+            enemy.goldMine = goldMine;
     }
 
     private Vector2 PickRandomSpawnPosition(Vector3 playerPos)

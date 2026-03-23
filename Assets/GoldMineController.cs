@@ -20,6 +20,10 @@ public class GoldMineController : MonoBehaviour
     [Tooltip("同一只野怪连续攻击多少次，才会成功偷走 1 金。")]
     [Min(1)] public int stealHitsRequired = 5;
 
+    [Header("调试（可选）")]
+    [Tooltip("输出金矿初始化与偷矿明细日志。")]
+    public bool debugMineLog = true;
+
     [Header("UI（可选）")]
     [Tooltip("金矿 UI 进度条（fillAmount = current/max）")]
     public Image mineFillImage;
@@ -48,6 +52,10 @@ public class GoldMineController : MonoBehaviour
         maxGold = Mathf.Max(1, maxGold);
         _currentGold = Mathf.Clamp(initialGold, 0, maxGold);
         stealHitsRequired = Mathf.Max(1, stealHitsRequired);
+        if (debugMineLog)
+        {
+            Debug.Log($"[GoldMine:{name}#{GetInstanceID()}] Awake initial={initialGold}, current={_currentGold}, max={maxGold}, stealHitsRequired={stealHitsRequired}");
+        }
         TryAutoBindUI();
         RefreshUIAndNotify();
     }
@@ -59,7 +67,11 @@ public class GoldMineController : MonoBehaviour
     public bool TryStealByEnemy(string enemyId)
     {
         if (IsDepleted)
+        {
+            if (debugMineLog)
+                Debug.Log($"[GoldMine:{name}#{GetInstanceID()}] steal ignored (depleted), enemyId={enemyId}");
             return false;
+        }
 
         if (string.IsNullOrWhiteSpace(enemyId))
             enemyId = "UnknownEnemy";
@@ -73,10 +85,16 @@ public class GoldMineController : MonoBehaviour
         }
 
         if (_currentStealHitCount < stealHitsRequired)
+        {
+            if (debugMineLog)
+                Debug.Log($"[GoldMine:{name}#{GetInstanceID()}] steal hit enemyId={enemyId}, combo={_currentStealHitCount}/{stealHitsRequired}, current={_currentGold}");
             return false;
+        }
 
         _currentStealHitCount = 0;
         _currentGold = Mathf.Max(0, _currentGold - 1);
+        if (debugMineLog)
+            Debug.Log($"[GoldMine:{name}#{GetInstanceID()}] STEAL SUCCESS enemyId={enemyId}, current={_currentGold}/{maxGold}");
         RefreshUIAndNotify();
         return true;
     }

@@ -27,16 +27,88 @@ public class Enemy : MonoBehaviour
 
     [Header("金矿目标")]
     public GoldMineController goldMine;
+    [Tooltip("当未拖拽 goldMine 且场景里也查不到时，按名称兜底查找矿点对象。")]
+    public string fallbackMineObjectName = "GoldMine_Active";
     [Tooltip("可选：用于记录敌人 ID。不填则自动使用实例 ID。")]
     public string enemyIdOverride;
     [Tooltip("偷矿成功后生成的金块预制体（应挂 GoldPickup）。")]
     public GameObject stolenGoldPickupPrefab;
+    [Tooltip("若未配置金块预制体，可直接拖 Sprite（如 G_Idle）作为运行时金块外观。")]
+    public Sprite stolenGoldFallbackSprite;
     [Tooltip("偷矿成功后金块在敌人附近散落半径。")]
     public float stolenGoldDropScatter = 0.35f;
+    [Tooltip("矿点命中判定补偿距离，避免因碰撞体中心偏移导致看起来贴脸却判定不到。")]
+    public float mineAttackHitPadding = 0.6f;
+    [Tooltip("矿点攻击动画未配置事件时，延迟多少秒自动结算一次命中。")]
+    public float mineAttackFallbackHitDelay = 0.2f;
+    [Tooltip("矿点攻击动画未配置结束事件时，多久后自动结束本次攻击。")]
+    public float mineAttackFallbackEndDelay = 0.55f;
+
+    [Header("偷矿后的携带与乱跑（新增）")]
+    [Tooltip("偷矿成功后：金块由野怪携带（挂在身上），而不是掉地上散落。")]
+    public bool carryStolenGold = false;
+    [Tooltip("携带金块挂到敌人的哪个节点（为空则挂到敌人自身）。")]
+    public Transform carriedGoldAttachPoint;
+    [Tooltip("携带金块在挂点上的本地偏移。")]
+    public Vector2 carriedGoldLocalOffset = new Vector2(0.0f, 0.25f);
+    [Tooltip("敌人拿着金块后切换到 Roam 状态，四处乱跑；如果为空则只依赖障碍碰撞不出地图。")]
+    public Collider2D roamBoundsCollider;
+    [Tooltip("乱跑时多久随机换一次方向。")]
+    public float roamDirectionChangeInterval = 1.0f;
+    [Tooltip("乱跑时遇到边界/障碍导致换向后，短暂冷却，避免左右抽搐。")]
+    public float roamObstacleResolveCooldown = 0.25f;
+    [Tooltip("当两边都无法通行时，暂停一小段时间再选择新方向，避免每帧来回翻转。")]
+    public float roamStuckDuration = 0.35f;
+
+    [Header("偷矿后行为（简化版）")]
+    [Tooltip("偷到金后：离开金矿（不会要求敌人携带金块）。")]
+    public bool fleeAfterSteal = true;
+    [Tooltip("偷到金后：是否在地上生成金块（默认关闭，简化为只离开，不掉金块）。")]
+    public bool spawnGoldPickupOnSteal = false;
+
+    [Header("偷矿后：离开金矿（简化版）")]
+    [Tooltip("偷到金后，野怪需要离开金矿至少这么远（世界单位），到达后停止离开。")]
+    public float fleeMinDistanceFromMine = 2.0f;
+    [Tooltip("偷到金后最长持续离开金矿的时间（秒）。时间到未离开到位就停下。")]
+    public float fleeMaxDuration = 6f;
+
+    [Header("调试日志（可选）")]
+    [Tooltip("勾选后输出敌人 AI 与矿点行为日志。")]
+    public bool debugMineAI = false;
+    [Tooltip("状态快照日志间隔（秒）。")]
+    public float debugLogInterval = 0.75f;
+    [Tooltip("当发生“切换到非耗尽金矿”时，自动在 Hierarchy 选中原本绑定的耗尽/禁用金矿对象（便于你直接删/改）。")]
+    public bool debugSelectDepletedMineOnSwitch = false;
 
     [Header("伤害设置")]
     public LayerMask playerLayer;         // 只勾选 Player 层
     public float attackDamage = 1f;          // 对玩家造成的伤害值
+
+    [Header("寻路阻挡调试（可选）")]
+    [Tooltip("打开后：当 IsPathBlocked 命中障碍时打印是哪一个 Collider 在挡路。")]
+    public bool debugPathBlocked = false;
+    [Tooltip("日志输出频率，避免刷屏。")]
+    public float debugPathBlockedLogInterval = 0.5f;
+    float _nextPathBlockedLogTime;
+
+    [Header("离开金矿调试（只在最终走不动时打印）")]
+    public bool debugFleeBlockSummary = false;
+    public float debugFleeBlockSummaryLogInterval = 1.0f;
+    float _nextFleeBlockSummaryLogTime;
+
+    Collider2D _lastPathBlockCollider;
+    Vector2 _lastPathBlockHitNormal;
+    Vector2 _lastPathBlockDirection;
+    float _lastPathBlockDistance;
+    int _lastPathBlockLayer;
+    string _lastPathBlockTag;
+    bool _lastPathBlockIsTrigger;
+    float _lastPathBlockTime;
+
+    [Header("离开金矿调试（更直观：任意挡路打印）")]
+    public bool debugRoamBlockHit = false;
+    public float debugRoamBlockHitLogInterval = 0.2f;
+    float _nextRoamBlockHitLogTime;
 
     [Header("Animator 参数名")]
     // 这里已经按你修正后的名字配置好，除非 Animator 里改名，否则不用再动
@@ -86,12 +158,27 @@ public class Enemy : MonoBehaviour
     Coroutine enemy2Skill01Coroutine;
     Vector2 enemy2Skill01DirCache = Vector2.right;
 
-    enum State { Idle, Chase, Attack, Cooldown, Enemy2Skill01Charging }
+    enum State { Idle, Chase, Attack, Cooldown, Enemy2Skill01Charging, Roam }
     enum AttackTargetType { None, Player, Mine }
     State currentState = State.Idle;
     float _hitStunEndTime;
     Vector2 _knockbackDir;
     float _knockbackSpeed;
+    bool _warnedMineMissing;
+    float _attackStateStartTime;
+    bool _mineHitAppliedThisAttack;
+    bool _mineStealSucceededThisAttack;
+    State _lastDebugState;
+    float _nextDebugLogTime;
+
+    GoldPickup _carriedGoldPickup; // 由野怪携带的金块（挂在敌人身上）
+    Vector2 _roamDir = Vector2.zero;
+    float _nextRoamDirChangeTime;
+    float _roamObstacleResolveUntil;
+    float _roamStuckUntil;
+    float _fleeUntilTime;
+    bool HasCarriedGold => _carriedGoldPickup != null && _carriedGoldPickup.amount > 0;
+    bool IsFleeingFromMine => fleeAfterSteal && Time.time < _fleeUntilTime;
 
     void Awake()
     {
@@ -125,6 +212,8 @@ public class Enemy : MonoBehaviour
         if (HandleHitStunAndKnockback())
             return;
 
+        DebugSnapshotTick();
+
         switch (currentState)
         {
             case State.Idle:
@@ -134,13 +223,17 @@ public class Enemy : MonoBehaviour
                 UpdateChase();
                 break;
             case State.Attack:
-                // 攻击状态完全由动画 + Animation Event 驱动
+                // 玩家攻击主要由动画事件驱动；矿点攻击额外提供容错，防止未配事件时卡死。
+                UpdateAttackStateFallback();
                 break;
             case State.Cooldown:
                 UpdateCooldown();
                 break;
             case State.Enemy2Skill01Charging:
                 UpdateEnemy2Skill01Charging();
+                break;
+            case State.Roam:
+                UpdateRoam();
                 break;
         }
     }
@@ -217,6 +310,13 @@ public class Enemy : MonoBehaviour
 
     void UpdateIdle()
     {
+        if (fleeAfterSteal && HasCarriedGold && targetPlayer == null)
+        {
+            currentState = State.Roam;
+            SetAnimState(idle: false, walk: true, attack: false);
+            return;
+        }
+
         // 无玩家目标：回矿点
         if (targetPlayer == null)
         {
@@ -272,7 +372,15 @@ public class Enemy : MonoBehaviour
     {
         if (targetPlayer == null)
         {
-            // 无玩家目标时，改为追矿点
+            // 追逐丢失：如果还带着偷到的金子，就继续 Roam 随机乱跑；
+            // 否则按原逻辑追矿点。
+            if (fleeAfterSteal && HasCarriedGold)
+            {
+                currentState = State.Roam;
+                SetAnimState(idle: false, walk: true, attack: false);
+                return;
+            }
+
             if (!HasValidMineTarget())
             {
                 currentState = State.Idle;
@@ -614,20 +722,29 @@ public class Enemy : MonoBehaviour
     {
         currentState = State.Attack;
         currentAttackTarget = AttackTargetType.Player;
+        _attackStateStartTime = Time.time;
+        _mineHitAppliedThisAttack = false;
         nextAttackTime = Time.time + attackCooldown;
         SetSkillCharging(false);
         SetAnimState(idle: false, walk: false, attack: true);
         if (rb != null) rb.velocity = Vector2.zero;
+        if (debugMineAI)
+            Debug.Log($"[{name}] StartAttack -> target=Player");
     }
 
     void StartMineAttack()
     {
         currentState = State.Attack;
         currentAttackTarget = AttackTargetType.Mine;
+        _attackStateStartTime = Time.time;
+        _mineHitAppliedThisAttack = false;
+        _mineStealSucceededThisAttack = false;
         nextAttackTime = Time.time + attackCooldown;
         SetSkillCharging(false);
         SetAnimState(idle: false, walk: false, attack: true);
         if (rb != null) rb.velocity = Vector2.zero;
+        if (debugMineAI)
+            Debug.Log($"[{name}] StartMineAttack distToMine={GetDistanceToMine():F2}");
     }
 
     void SetAnimState(bool idle, bool walk, bool attack)
@@ -686,12 +803,7 @@ public class Enemy : MonoBehaviour
     {
         if (currentAttackTarget == AttackTargetType.Mine)
         {
-            if (HasValidMineTarget() && Vector2.Distance(transform.position, mineTarget.position) <= mineAttackDistance + 0.25f)
-            {
-                bool stole = goldMine.TryStealByEnemy(GetEnemyId());
-                if (stole)
-                    SpawnStolenGoldPickup();
-            }
+            TryMineStealHit();
             return;
         }
 
@@ -713,7 +825,18 @@ public class Enemy : MonoBehaviour
     /// </summary>
     public void OnAttackEnd()
     {
+        // 如果本次偷矿真正成功，则攻击结束后立刻开始离开金矿（不再回矿点）。
+        if (fleeAfterSteal && currentAttackTarget == AttackTargetType.Mine && _mineStealSucceededThisAttack)
+        {
+            currentState = State.Roam;
+            SetAnimState(idle: false, walk: true, attack: false);
+            return;
+        }
+
         currentAttackTarget = AttackTargetType.None;
+        _mineHitAppliedThisAttack = false;
+        if (debugMineAI)
+            Debug.Log($"[{name}] OnAttackEnd state={currentState}");
 
         if (targetPlayer != null)
         {
@@ -738,6 +861,7 @@ public class Enemy : MonoBehaviour
                 currentState = State.Chase;
                 SetAnimState(idle: false, walk: true, attack: false);
             }
+            return;
         }
 
         if (HasValidMineTarget())
@@ -791,9 +915,65 @@ public class Enemy : MonoBehaviour
             if (c == null || c.isTrigger) continue;
             if (c.gameObject == gameObject) continue;
 
+            // 如果敌人正携带金块，金块 Collider 不应参与寻路障碍检测；
+            // 否则金块挂在身上时可能导致敌人“误判前方被挡”而左右抽搐。
+            if (_carriedGoldPickup != null)
+            {
+                Transform goldTr = _carriedGoldPickup.transform;
+                if (goldTr != null && (c.transform == goldTr || c.transform.IsChildOf(goldTr)))
+                    continue;
+            }
+
+            // 金矿自身如果意外带了碰撞体（可能在子物体上），不应阻挡敌人靠近/攻击。
+            // 这样即使你“根物体没加 collider”，也不会卡在边界。
+            if (c != null && c.GetComponentInParent<GoldMineController>() != null)
+                continue;
+
+            // roamBoundsCollider 只用于“边界约束”，不应该参与寻路障碍检测。
+            // 否则如果它的 Layer 恰好在 Default/Enemy，会被 Cast 命中导致左右抽搐。
+            if (roamBoundsCollider != null)
+            {
+                if (c == roamBoundsCollider || c.transform.IsChildOf(roamBoundsCollider.transform))
+                    continue;
+            }
+
+            // 乱跑阶段允许“穿过其它野怪”，避免偷矿后被敌群堵住导致原地不动。
+            // 只在 Roam 启用该放宽；追玩家/回矿时仍保留敌人互相阻挡。
+            int enemyLayer = LayerMask.NameToLayer("Enemy");
+            if (currentState == State.Roam && enemyLayer >= 0 && c.gameObject.layer == enemyLayer)
+                continue;
+
             // 忽略“从起点贴合碰撞体”导致的距离为 0 命中
             if (hit.distance <= 0.001f)
                 continue;
+
+            // 为减少误判：当命中的法线几乎是上下方向（通常是地面/平台），
+            // 忽略它。否则会在离开金矿边缘/走路贴地时把地面当成前方障碍。
+            // direction.y 不一定严格为 0，所以这里放宽阈值。
+            if (Mathf.Abs(direction.y) < 0.25f && Mathf.Abs(hit.normal.y) > 0.5f)
+                continue;
+
+            // 记录最近一次真正“挡路”的碰撞体信息，供 UpdateRoam 离开阶段总结输出。
+            _lastPathBlockCollider = c;
+            _lastPathBlockHitNormal = hit.normal;
+            _lastPathBlockDirection = direction;
+            _lastPathBlockDistance = distance;
+            _lastPathBlockLayer = c.gameObject.layer;
+            _lastPathBlockTag = c.tag;
+            _lastPathBlockIsTrigger = c.isTrigger;
+            _lastPathBlockTime = Time.time;
+
+            if (debugPathBlocked && Time.time >= _nextPathBlockedLogTime)
+            {
+                _nextPathBlockedLogTime = Time.time + Mathf.Max(0.01f, debugPathBlockedLogInterval);
+                string colliderName = c != null ? c.name : "null";
+                int layer = c != null ? c.gameObject.layer : -1;
+                string tag = c != null ? c.tag : "null";
+                Debug.Log($"[{name}] IsPathBlocked HIT state={currentState} " +
+                          $"from={fromPos} dir={direction} dist={distance:F3} hitDist={hit.distance:F3} " +
+                          $"hitNormal={hit.normal} " +
+                          $"blockCollider={colliderName} blockLayer={layer} tag={tag} isTrigger={c.isTrigger}");
+            }
 
             return true;
         }
@@ -858,16 +1038,146 @@ public class Enemy : MonoBehaviour
 
     void ResolveMineTarget()
     {
+        // 先按名字锁定矿点对象，避免场景里存在多个 GoldMineController 时绑定到错误实例。
+        if (mineTarget == null && !string.IsNullOrWhiteSpace(fallbackMineObjectName))
+        {
+            GameObject mineObj = GameObject.Find(fallbackMineObjectName);
+            if (mineObj == null)
+            {
+                Transform[] all = Resources.FindObjectsOfTypeAll<Transform>();
+                foreach (Transform t in all)
+                {
+                    if (t == null) continue;
+                    if (!t.gameObject.scene.IsValid()) continue;
+                    if (t.name == fallbackMineObjectName || t.name.StartsWith(fallbackMineObjectName))
+                    {
+                        mineObj = t.gameObject;
+                        break;
+                    }
+                }
+            }
+
+            if (mineObj != null)
+            {
+                mineTarget = mineObj.transform;
+                if (goldMine == null) goldMine = mineObj.GetComponent<GoldMineController>();
+                if (goldMine == null) goldMine = mineObj.GetComponentInChildren<GoldMineController>();
+                if (goldMine == null) goldMine = mineObj.GetComponentInParent<GoldMineController>();
+                if (debugMineAI)
+                    Debug.Log($"[{name}] ResolveMineTarget byName -> mineTarget={mineTarget.name}, goldMine={(goldMine != null ? $"{goldMine.name}#{goldMine.GetInstanceID()}" : "null")}");
+            }
+        }
+
+        if (goldMine == null && mineTarget != null)
+        {
+            goldMine = mineTarget.GetComponent<GoldMineController>();
+            if (goldMine == null) goldMine = mineTarget.GetComponentInChildren<GoldMineController>();
+            if (goldMine == null) goldMine = mineTarget.GetComponentInParent<GoldMineController>();
+        }
+
         if (goldMine == null)
             goldMine = FindObjectOfType<GoldMineController>();
-        mineTarget = goldMine != null ? goldMine.transform : null;
+        if (goldMine == null)
+            goldMine = FindAnyGoldMineController(includeInactive: true);
+
+        if (mineTarget == null && goldMine != null)
+            mineTarget = goldMine.transform;
+
+        if (debugMineAI)
+            Debug.Log($"[{name}] ResolveMineTarget final -> mineTarget={(mineTarget != null ? mineTarget.name : "null")}, goldMine={(goldMine != null ? $"{goldMine.name}#{goldMine.GetInstanceID()} current={goldMine.CurrentGold}" : "null")}");
+
+        // 如果绑定到的是“空矿”，且场景里存在同名但非空的金矿控制器，
+        // 切换到非空那一个，避免因为多个同名对象导致敌人始终不去偷矿。
+        if (goldMine != null && goldMine.CurrentGold <= 0 && !string.IsNullOrWhiteSpace(fallbackMineObjectName))
+        {
+            GoldMineController[] mines = Resources.FindObjectsOfTypeAll<GoldMineController>();
+            GoldMineController best = null;
+            foreach (GoldMineController m in mines)
+            {
+                if (m == null) continue;
+                // 过滤掉 Prefab 资产/非场景对象，避免拿到一个 CurrentGold==0 的“静态组件”。
+                if (!m.gameObject.scene.IsValid())
+                    continue;
+                string mn = m.gameObject.name;
+                bool nameOk = mn == fallbackMineObjectName || mn.StartsWith(fallbackMineObjectName);
+                if (!nameOk) continue;
+                if (m.CurrentGold > 0)
+                {
+                    best = m;
+                    break;
+                }
+            }
+
+            if (best != null && best != goldMine)
+            {
+                if (debugMineAI)
+                {
+                    Debug.Log($"[{name}] ResolveMineTarget SWITCH: from goldMine={goldMine.name}#{goldMine.GetInstanceID()} current={goldMine.CurrentGold} activeInHierarchy={goldMine.gameObject.activeInHierarchy} enabled={goldMine.enabled} path={GetTransformPath(goldMine.transform)}" +
+                              $" -> to goldMine={best.name}#{best.GetInstanceID()} current={best.CurrentGold} activeInHierarchy={best.gameObject.activeInHierarchy} enabled={best.enabled} path={GetTransformPath(best.transform)}");
+                }
+#if UNITY_EDITOR
+                if (debugSelectDepletedMineOnSwitch && goldMine != null)
+                    UnityEditor.Selection.activeGameObject = goldMine.gameObject;
+#endif
+                goldMine = best;
+                mineTarget = best.transform;
+                if (debugMineAI)
+                    Debug.Log($"[{name}] ResolveMineTarget SWITCH non-depleted mine -> goldMine={goldMine.name}#{goldMine.GetInstanceID()} current={goldMine.CurrentGold}");
+            }
+        }
+    }
+
+    static string GetTransformPath(Transform t)
+    {
+        if (t == null) return "null";
+        string path = t.name;
+        Transform cur = t.parent;
+        int guard = 0;
+        while (cur != null && guard < 30)
+        {
+            path = cur.name + "/" + path;
+            cur = cur.parent;
+            guard++;
+        }
+        return path;
     }
 
     bool HasValidMineTarget()
     {
         if (goldMine == null || mineTarget == null)
             ResolveMineTarget();
-        return goldMine != null && mineTarget != null && !goldMine.IsDepleted;
+
+        bool hasTarget = mineTarget != null;
+        bool mineAlive = goldMine == null || !goldMine.IsDepleted;
+        bool ok = hasTarget && mineAlive;
+
+        if (!ok && !_warnedMineMissing)
+        {
+            // 矿被打空是正常流程，不打印“找不到目标”的告警，避免误导排查方向。
+            if (!hasTarget)
+            {
+                _warnedMineMissing = true;
+                string targetName = mineTarget != null ? mineTarget.name : "null";
+                string mineName = goldMine != null ? goldMine.name : "null";
+                Debug.LogWarning($"[{name}] 金矿目标不可用：未找到矿点 Transform。fallbackMineObjectName={fallbackMineObjectName}, mineTarget={targetName}, goldMine={mineName}");
+            }
+        }
+        return ok;
+    }
+
+    static GoldMineController FindAnyGoldMineController(bool includeInactive)
+    {
+        if (!includeInactive)
+            return FindObjectOfType<GoldMineController>();
+
+        GoldMineController[] all = Resources.FindObjectsOfTypeAll<GoldMineController>();
+        foreach (GoldMineController mine in all)
+        {
+            if (mine == null) continue;
+            if (mine.gameObject.scene.IsValid())
+                return mine;
+        }
+        return null;
     }
 
     void UpdateTargetSelection()
@@ -876,7 +1186,11 @@ public class Enemy : MonoBehaviour
         {
             float dist = Vector2.Distance(transform.position, targetPlayer.position);
             if (dist > loseAggroRange)
+            {
+                if (debugMineAI)
+                    Debug.Log($"[{name}] Lose aggro player dist={dist:F2} > {loseAggroRange:F2}");
                 targetPlayer = null;
+            }
             return;
         }
 
@@ -899,7 +1213,11 @@ public class Enemy : MonoBehaviour
         }
 
         if (best != null)
+        {
             targetPlayer = best;
+            if (debugMineAI)
+                Debug.Log($"[{name}] Acquire player dist={Vector2.Distance(transform.position, targetPlayer.position):F2}");
+        }
     }
 
     string GetEnemyId()
@@ -911,14 +1229,376 @@ public class Enemy : MonoBehaviour
 
     void SpawnStolenGoldPickup()
     {
-        if (stolenGoldPickupPrefab == null)
-            return;
-
         Vector2 offset = UnityEngine.Random.insideUnitCircle * Mathf.Max(0f, stolenGoldDropScatter);
         Vector2 spawnPos = (Vector2)transform.position + offset;
-        GameObject go = Instantiate(stolenGoldPickupPrefab, spawnPos, Quaternion.identity);
+
+        GameObject go = null;
+        if (stolenGoldPickupPrefab != null)
+            go = Instantiate(stolenGoldPickupPrefab, spawnPos, Quaternion.identity);
+        else if (stolenGoldFallbackSprite != null)
+            go = CreateRuntimeGoldPickup(spawnPos);
+
+        if (go == null)
+            return;
+
         GoldPickup pickup = go.GetComponent<GoldPickup>();
-        if (pickup != null)
-            pickup.amount = Mathf.Max(1, pickup.amount);
+        if (pickup == null)
+            pickup = go.AddComponent<GoldPickup>();
+        pickup.amount = Mathf.Max(1, pickup.amount);
+        EnsurePickupTrigger(go);
+
+        if (debugMineAI)
+        {
+            string source = stolenGoldPickupPrefab != null ? "prefab" : (stolenGoldFallbackSprite != null ? "sprite-fallback" : "none");
+            Debug.Log($"[{name}] SpawnStolenGoldPickup source={source} amount={pickup.amount} pos={spawnPos}");
+        }
+    }
+
+    void EnsurePickupTrigger(GameObject pickupObj)
+    {
+        if (pickupObj == null)
+            return;
+
+        // 保证有 Collider2D 且是 Trigger，否则 PlayerGoldCarrier 的 OnTriggerEnter2D 不会触发。
+        Collider2D[] cols = pickupObj.GetComponentsInChildren<Collider2D>(true);
+        if (cols == null || cols.Length == 0)
+        {
+            CircleCollider2D col = pickupObj.AddComponent<CircleCollider2D>();
+            col.isTrigger = true;
+            col.radius = 0.25f;
+        }
+        else
+        {
+            foreach (Collider2D c in cols)
+            {
+                if (c == null) continue;
+                c.isTrigger = true;
+            }
+        }
+
+        // 触发器事件通常要求至少一方有 Rigidbody2D。
+        // 玩家本身通常已有 Rigidbody2D，但为了稳妥，这里给金块加一个 Kinematic Rigidbody2D（不会影响玩家移动）。
+        Rigidbody2D rb2d = pickupObj.GetComponent<Rigidbody2D>();
+        if (rb2d == null)
+        {
+            rb2d = pickupObj.AddComponent<Rigidbody2D>();
+        }
+        // 不管 prefab 原本怎么配，统一把金块 Rigidbody2D 变成不受重力影响，避免落下。
+        rb2d.bodyType = RigidbodyType2D.Kinematic;
+        rb2d.gravityScale = 0f;
+        rb2d.isKinematic = true;
+        rb2d.velocity = Vector2.zero;
+        rb2d.angularVelocity = 0f;
+
+        if (debugMineAI)
+        {
+            Collider2D anyCol = pickupObj.GetComponent<Collider2D>();
+            Debug.Log($"[{name}] EnsurePickupTrigger on {pickupObj.name}: colTrigger={(anyCol != null ? anyCol.isTrigger : false)}, rb2d={(rb2d != null)}");
+        }
+    }
+
+    GameObject CreateRuntimeGoldPickup(Vector2 spawnPos)
+    {
+        GameObject go = new GameObject("GoldPickup_Runtime");
+        go.transform.position = spawnPos;
+
+        SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = stolenGoldFallbackSprite;
+        sr.sortingLayerID = spriteRenderer != null ? spriteRenderer.sortingLayerID : 0;
+        sr.sortingOrder = spriteRenderer != null ? spriteRenderer.sortingOrder + 1 : 0;
+
+        CircleCollider2D col = go.AddComponent<CircleCollider2D>();
+        col.isTrigger = true;
+        col.radius = 0.25f;
+        return go;
+    }
+
+    void UpdateAttackStateFallback()
+    {
+        if (currentAttackTarget != AttackTargetType.Mine)
+            return;
+
+        float elapsed = Time.time - _attackStateStartTime;
+
+        if (!_mineHitAppliedThisAttack && elapsed >= Mathf.Max(0.01f, mineAttackFallbackHitDelay))
+            TryMineStealHit();
+
+        if (elapsed >= Mathf.Max(mineAttackFallbackEndDelay, mineAttackFallbackHitDelay + 0.05f))
+            OnAttackEnd();
+    }
+
+    bool TryMineStealHit()
+    {
+        if (_mineHitAppliedThisAttack)
+            return false;
+
+        if (!HasValidMineTarget())
+            return false;
+
+        float maxHitDist = mineAttackDistance + Mathf.Max(0f, mineAttackHitPadding);
+        if (Vector2.Distance(transform.position, mineTarget.position) > maxHitDist)
+        {
+            if (debugMineAI)
+                Debug.Log($"[{name}] MineHit miss dist={Vector2.Distance(transform.position, mineTarget.position):F2} > maxHitDist={maxHitDist:F2}");
+            return false;
+        }
+
+        _mineHitAppliedThisAttack = true;
+        bool stole = goldMine != null && goldMine.TryStealByEnemy(GetEnemyId());
+        if (debugMineAI)
+        {
+            int currentGold = goldMine != null ? goldMine.CurrentGold : -1;
+            Debug.Log($"[{name}] MineHit attempt stole={stole} currentGold={currentGold}");
+        }
+        if (stole)
+        {
+            _mineStealSucceededThisAttack = true;
+            if (fleeAfterSteal)
+                _fleeUntilTime = Time.time + Mathf.Max(0.1f, fleeMaxDuration);
+
+            if (carryStolenGold)
+                GiveCarriedGoldPickup(1);
+            else if (spawnGoldPickupOnSteal)
+                SpawnStolenGoldPickup();
+        }
+        return stole;
+    }
+
+    void GiveCarriedGoldPickup(int amount)
+    {
+        amount = Mathf.Max(1, amount);
+
+        // 已有携带金块：只累加数量即可（避免叠多份 GameObject）。
+        if (_carriedGoldPickup != null)
+        {
+            _carriedGoldPickup.amount += amount;
+            return;
+        }
+
+        GameObject go = null;
+        if (stolenGoldPickupPrefab != null)
+            go = Instantiate(stolenGoldPickupPrefab, transform.position, Quaternion.identity);
+        else if (stolenGoldFallbackSprite != null)
+            go = CreateRuntimeGoldPickup(transform.position);
+
+        if (go == null)
+            return;
+
+        GoldPickup pickup = go.GetComponent<GoldPickup>();
+        if (pickup == null)
+            pickup = go.AddComponent<GoldPickup>();
+
+        pickup.amount = amount;
+
+        // 无论 prefab 如何配，强制改成可触发拾取且不受重力影响（避免掉地上堆叠）。
+        EnsurePickupTrigger(go);
+
+        // 把金块挂到敌人身上（跟随走动）。
+        Transform attach = carriedGoldAttachPoint != null ? carriedGoldAttachPoint : transform;
+        go.transform.SetParent(attach, worldPositionStays: false);
+        NormalizeCarriedGoldWorldScale(go.transform, attach);
+        go.transform.localPosition = carriedGoldLocalOffset;
+        go.transform.localRotation = Quaternion.identity;
+        SyncCarriedGoldRenderOrder(go);
+
+        _carriedGoldPickup = pickup;
+
+        if (debugMineAI)
+            Debug.Log($"[{name}] GiveCarriedGoldPickup amount={amount} pickup={go.name}");
+    }
+
+    void SyncCarriedGoldRenderOrder(GameObject goldObj)
+    {
+        if (goldObj == null)
+            return;
+
+        // 金块挂到敌人身上后，默认排序可能低于敌人自身，导致“已携带但看不见”。
+        // 统一把金块的渲染层与敌人一致，order 提高 1，保证显示在角色前面。
+        SpriteRenderer[] srs = goldObj.GetComponentsInChildren<SpriteRenderer>(true);
+        if (srs == null || srs.Length == 0)
+            return;
+
+        int layerId = spriteRenderer != null ? spriteRenderer.sortingLayerID : 0;
+        int order = spriteRenderer != null ? spriteRenderer.sortingOrder + 1 : 1;
+        foreach (SpriteRenderer sr in srs)
+        {
+            if (sr == null) continue;
+            sr.sortingLayerID = layerId;
+            sr.sortingOrder = order;
+        }
+    }
+
+    void NormalizeCarriedGoldWorldScale(Transform goldTr, Transform parentTr)
+    {
+        if (goldTr == null || parentTr == null)
+            return;
+
+        // enemy3 等父物体可能有较大缩放，子物体会被放大。
+        // 通过设置反向 localScale，让携带金块保持近似统一的世界尺寸。
+        Vector3 parentLossy = parentTr.lossyScale;
+        float sx = Mathf.Abs(parentLossy.x) > 0.0001f ? 1f / parentLossy.x : 1f;
+        float sy = Mathf.Abs(parentLossy.y) > 0.0001f ? 1f / parentLossy.y : 1f;
+        float sz = Mathf.Abs(parentLossy.z) > 0.0001f ? 1f / parentLossy.z : 1f;
+        goldTr.localScale = new Vector3(sx, sy, sz);
+    }
+
+    void UpdateRoam()
+    {
+        // 偷到金子后：四处随机乱走；路上遇到 PlayerNet(=Tag:Player)则追逐；
+        // 追逐丢失（targetPlayer=null）后又回到随机乱跑。
+        if (!fleeAfterSteal || !HasCarriedGold)
+        {
+            currentState = State.Idle;
+            SetAnimState(idle: true, walk: false, attack: false);
+            return;
+        }
+
+        if (targetPlayer != null)
+        {
+            currentState = State.Chase;
+            SetAnimState(idle: false, walk: true, attack: false);
+            return;
+        }
+
+        Vector2 myPos = rb != null ? rb.position : (Vector2)transform.position;
+
+        if (_roamDir == Vector2.zero || Time.time >= _nextRoamDirChangeTime)
+        {
+            _roamDir = PickRandomRoamDirection();
+            _nextRoamDirChangeTime = Time.time + Mathf.Max(0.05f, roamDirectionChangeInterval);
+        }
+
+        float roamMoveDistance = moveSpeed * Time.deltaTime;
+        bool allowAlternativeDirs = Time.time >= _roamObstacleResolveUntil;
+        bool moved = TryMoveRoam(
+            myPos,
+            _roamDir,
+            roamMoveDistance,
+            allowAlternativeDirs,
+            out Vector2 usedDir,
+            out Vector2 nextPos,
+            out bool usedAlternative);
+
+        if (moved)
+        {
+            if (rb != null) rb.MovePosition(nextPos);
+            else transform.position = nextPos;
+
+            if (spriteRenderer != null)
+                spriteRenderer.flipX = (usedDir.x < 0f) ^ invertFacing;
+
+            SetAnimState(idle: false, walk: true, attack: false);
+
+            if (usedAlternative)
+                _roamObstacleResolveUntil = Time.time + Mathf.Max(0.01f, roamObstacleResolveCooldown);
+        }
+        else
+        {
+            // 卡住时稍等片刻再随机方向
+            if (Time.time >= _roamStuckUntil)
+            {
+                _roamStuckUntil = Time.time + Mathf.Max(0.01f, roamStuckDuration);
+                _roamDir = Vector2.zero;
+            }
+
+            if (rb != null) rb.velocity = Vector2.zero;
+            SetAnimState(idle: true, walk: false, attack: false);
+        }
+    }
+
+    Vector2 PickRandomRoamDirection()
+    {
+        Vector2 d = Random.insideUnitCircle;
+        if (d.sqrMagnitude < 0.0001f)
+            d = Vector2.right;
+        return d.normalized;
+    }
+
+    bool IsWithinRoamBounds(Vector2 worldPos)
+    {
+        if (roamBoundsCollider == null)
+            return true;
+
+        if (!roamBoundsCollider.bounds.Contains(worldPos))
+            return false;
+
+        // 精确判断：RoamBoundsCollider 可能是触发器或普通碰撞体，OverlapPoint 都能用
+        return roamBoundsCollider.OverlapPoint(worldPos);
+    }
+
+    bool TryMoveRoam(
+        Vector2 fromPos,
+        Vector2 desiredDir,
+        float moveDistance,
+        bool allowAlternativeDirs,
+        out Vector2 usedDir,
+        out Vector2 nextPos,
+        out bool usedAlternative)
+    {
+        usedAlternative = false;
+
+        if (desiredDir.sqrMagnitude < 0.0001f)
+            desiredDir = Vector2.right;
+
+        Vector2 primaryDir = desiredDir.normalized;
+        Vector2 leftDir = new Vector2(-primaryDir.y, primaryDir.x).normalized;
+        Vector2 rightDir = -leftDir;
+        Vector2 backDir = -primaryDir;
+
+        Vector2[] candidates = allowAlternativeDirs
+            ? new Vector2[] { primaryDir, leftDir, rightDir, backDir }
+            : new Vector2[] { primaryDir };
+
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            Vector2 d = candidates[i];
+            if (d.sqrMagnitude < 0.0001f)
+                continue;
+
+            if (IsPathBlocked(fromPos, d, moveDistance))
+                continue;
+
+            Vector2 p = fromPos + d * moveDistance;
+
+            usedDir = d;
+            nextPos = p;
+            usedAlternative = i > 0;
+            return true;
+        }
+
+        usedDir = primaryDir;
+        nextPos = fromPos;
+        return false;
+    }
+
+    void DebugSnapshotTick()
+    {
+        if (!debugMineAI)
+            return;
+
+        if (_lastDebugState != currentState)
+        {
+            _lastDebugState = currentState;
+            Debug.Log($"[{name}] State -> {currentState}, target={(targetPlayer != null ? "Player" : "Mine/None")}");
+        }
+
+        float now = Time.time;
+        if (now < _nextDebugLogTime)
+            return;
+
+        _nextDebugLogTime = now + Mathf.Max(0.1f, debugLogInterval);
+        float distMine = GetDistanceToMine();
+        float distPlayer = targetPlayer != null ? Vector2.Distance(transform.position, targetPlayer.position) : -1f;
+        bool hasMine = mineTarget != null;
+        bool mineDepleted = goldMine != null && goldMine.IsDepleted;
+        string mineInfo = goldMine != null ? $"{goldMine.name}#{goldMine.GetInstanceID()} current={goldMine.CurrentGold}" : "null";
+        Debug.Log($"[{name}] Snapshot state={currentState}, hasMine={hasMine}, mineDepleted={mineDepleted}, mine={mineInfo}, distMine={(distMine >= 0f ? distMine.ToString("F2") : "N/A")}, distPlayer={(distPlayer >= 0f ? distPlayer.ToString("F2") : "N/A")}");
+    }
+
+    float GetDistanceToMine()
+    {
+        if (mineTarget == null)
+            return -1f;
+        return Vector2.Distance(transform.position, mineTarget.position);
     }
 }
