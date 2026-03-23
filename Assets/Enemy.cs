@@ -37,6 +37,10 @@ public class Enemy : MonoBehaviour
     Animator animator;
     Rigidbody2D rb;
     SpriteRenderer spriteRenderer;
+    CapsuleCollider2D bodyCollider;
+    ContactFilter2D pathBlockFilter;
+    readonly RaycastHit2D[] castHits = new RaycastHit2D[8];
+
     Transform targetPlayer;   // 索敌到的玩家
     float nextAttackTime;     // 下次允许攻击的时间
 
@@ -64,6 +68,21 @@ public class Enemy : MonoBehaviour
         animator = GetComponent<Animator>();
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
+        bodyCollider = GetComponent<CapsuleCollider2D>();
+
+        // 墙体(Default) + 其它野怪(Enemy)：用身体 Collider 做 Cast，不会误判自己的碰撞体
+        int mask = 0;
+        int layerDefault = LayerMask.NameToLayer("Default");
+        int layerEnemy = LayerMask.NameToLayer("Enemy");
+        if (layerDefault >= 0) mask |= 1 << layerDefault;
+        if (layerEnemy >= 0) mask |= 1 << layerEnemy;
+        pathBlockFilter = new ContactFilter2D
+        {
+            useLayerMask = true,
+            useTriggers = false
+        };
+        pathBlockFilter.SetLayerMask(mask);
+
         SetAnimState(idle: true, walk: false, attack: false);
         SetSkillCharging(false);
     }
@@ -152,7 +171,8 @@ public class Enemy : MonoBehaviour
             return;
         }
 
-        Vector2 myPos = transform.position;
+        // 用刚体位置做寻路检测，与 MovePosition 一致（避免 Update 里 transform 与物理不同步）
+        Vector2 myPos = rb != null ? rb.position : (Vector2)transform.position;
         Vector2 targetPos = targetPlayer.position;
         Vector2 dir = (targetPos - myPos).normalized;
 
@@ -526,25 +546,29 @@ public class Enemy : MonoBehaviour
     }
 
     /// <summary>
-    /// 检测敌人前方是否被障碍物挡住（建筑、墙等）
-    /// 用于 Kinematic 模式下的碰撞检测，只检测 Default layer（建筑物），忽略 Enemy layer（其他敌人）
+    /// 检测沿某方向移动是否会与墙体或其它野怪的身体碰撞。
+    /// 必须用身体 Capsule 做 Cast：仅用 Raycast 会忽略体积宽度；且必须把 Enemy 算进去，否则会互相挤进同一格。
     /// </summary>
     private bool IsPathBlocked(Vector2 fromPos, Vector2 direction, float distance)
     {
-        // 创建 LayerMask：只检测 Default layer（建筑物），忽略 Enemy layer（敌人）
-        int defaultLayer = LayerMask.NameToLayer("Default");
-        LayerMask blockMask = 1 << defaultLayer;  // 只检测 Default layer
-        
-        // Raycast 检测：从敌人位置沿移动方向检测，距离为本帧移动距离 + 0.2f 的安全距离
-        // 使用 LayerMask 只检测建筑物，不检测敌人
-        RaycastHit2D hit = Physics2D.Raycast(fromPos, direction, distance + 0.2f, blockMask);
-        
-        // 如果检测到 Default layer 的碰撞体（建筑物），则被挡住
-        if (hit.collider != null)
+        if (bodyCollider == null)
         {
-            Debug.Log($"[Enemy {gameObject.name}] 前方被 {hit.collider.gameObject.name} 挡住");
+            int defaultLayer = LayerMask.NameToLayer("Default");
+            if (defaultLayer < 0) return false;
+            RaycastHit2D hit = Physics2D.Raycast(fromPos, direction, distance + 0.2f, 1 << defaultLayer);
+            return hit.collider != null;
+        }
+
+        float castDist = Mathf.Max(distance, 0.001f) + 0.08f;
+        int count = bodyCollider.Cast(direction, pathBlockFilter, castHits, castDist);
+        for (int i = 0; i < count; i++)
+        {
+            Collider2D c = castHits[i].collider;
+            if (c == null || c.isTrigger) continue;
+            if (c.gameObject == gameObject) continue;
             return true;
         }
+
         return false;
     }
 

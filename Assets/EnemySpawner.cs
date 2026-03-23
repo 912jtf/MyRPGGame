@@ -32,18 +32,33 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("同一时间场景中允许存在的敌人最大数量（0 或负数表示不限制）")]
     public int maxEnemies = 0;
 
-    [Header("出生点检测（避免卡墙）")]
+    [Header("出生点检测（避免卡墙 / 与其它野怪重叠）")]
     [Tooltip("会阻挡走路的层（如建筑、墙、障碍），生成时避开这些碰撞体")]
     public LayerMask obstacleLayers;
+    [Tooltip("野怪所在层（如 Enemy）。若勾选，则生成点不能与已有野怪身体重叠")]
+    public LayerMask enemyLayers;
     [Tooltip("检测半径，略大于敌人碰撞体即可")]
     public float spawnCheckRadius = 0.5f;
     [Tooltip("最多尝试几次随机位置，都无效则本帧不生成")]
     public int maxSpawnAttempts = 10;
 
     private float _timer;
+    ContactFilter2D _enemySpawnFilter;
+    readonly Collider2D[] _enemyOverlapBuffer = new Collider2D[16];
 
     private void Start()
     {
+        // 未在 Inspector 勾选时，默认检测 Enemy 层，避免生成点与已有野怪重叠
+        if (enemyLayers.value == 0)
+            enemyLayers = LayerMask.GetMask("Enemy");
+
+        _enemySpawnFilter = new ContactFilter2D
+        {
+            useLayerMask = true,
+            useTriggers = false // 必须忽略索敌用大圆 Trigger，否则会误判整片区域被占用
+        };
+        _enemySpawnFilter.SetLayerMask(enemyLayers);
+
         if (player == null)
         {
             GameObject p = GameObject.FindGameObjectWithTag("Player");
@@ -105,15 +120,15 @@ public class EnemySpawner : MonoBehaviour
         {
             Vector2 finalPos = PickRandomSpawnPosition(playerPos);
 
-            // 若未勾选障碍层，不检测，直接生成
-            if (obstacleLayers == 0)
-            {
-                Instantiate(selectedPrefab, finalPos, Quaternion.identity);
-                return;
-            }
+            // 若未勾选障碍层，不检测障碍，但仍可检测与其它野怪重叠
+            bool blockedByObstacle = obstacleLayers != 0 &&
+                Physics2D.OverlapCircle(finalPos, spawnCheckRadius, obstacleLayers);
+            int enemyHits = enemyLayers.value != 0
+                ? Physics2D.OverlapCircle(finalPos, spawnCheckRadius, _enemySpawnFilter, _enemyOverlapBuffer)
+                : 0;
+            bool blockedByEnemy = enemyHits > 0;
 
-            // 检测该点是否与障碍重叠，不重叠才生成
-            if (!Physics2D.OverlapCircle(finalPos, spawnCheckRadius, obstacleLayers))
+            if (!blockedByObstacle && !blockedByEnemy)
             {
                 Instantiate(selectedPrefab, finalPos, Quaternion.identity);
                 return;
