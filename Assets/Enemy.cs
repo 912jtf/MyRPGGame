@@ -24,6 +24,8 @@ public class Enemy : MonoBehaviour
     public float playerAggroRange = 3.5f;
     [Tooltip("玩家超出该范围后，敌人会放弃追击并回到矿点。")]
     public float loseAggroRange = 6f;
+    [Tooltip("玩家超出 loseAggroRange 后，额外追击的耐心时间（秒）。到时仍超出才真正脱战回矿。")]
+    public float loseAggroPatience = 3f;
 
     [Header("金矿目标")]
     public GoldMineController goldMine;
@@ -51,7 +53,7 @@ public class Enemy : MonoBehaviour
     public Transform carriedGoldAttachPoint;
     [Tooltip("携带金块在挂点上的本地偏移。")]
     public Vector2 carriedGoldLocalOffset = new Vector2(0.0f, 0.25f);
-    [Tooltip("敌人拿着金块后切换到 Roam 状态，四处乱跑；如果为空则只依赖障碍碰撞不出地图。")]
+    [Tooltip("仅用于寻路时忽略该碰撞体（勿把它当作整张地图边界；地图范围请用「地图边界」矩形）。")]
     public Collider2D roamBoundsCollider;
     [Tooltip("乱跑时多久随机换一次方向。")]
     public float roamDirectionChangeInterval = 1.0f;
@@ -59,6 +61,12 @@ public class Enemy : MonoBehaviour
     public float roamObstacleResolveCooldown = 0.25f;
     [Tooltip("当两边都无法通行时，暂停一小段时间再选择新方向，避免每帧来回翻转。")]
     public float roamStuckDuration = 0.35f;
+
+    [Header("地图边界（偷矿携带金块时）")]
+    [Tooltip("偷到金后乱跑或追玩家时，将位置限制在此世界坐标矩形内；与 EnemySpawner、WorldGoldScatterSpawner 的 min/max 对齐。")]
+    public bool clampCarriedGoldToMap = true;
+    public Vector2 mapClampWorldMin = new Vector2(-13.34f, -4.39f);
+    public Vector2 mapClampWorldMax = new Vector2(13.34f, 4.39f);
 
     [Header("偷矿后行为（简化版）")]
     [Tooltip("偷到金后：离开金矿（不会要求敌人携带金块）。")]
@@ -177,6 +185,7 @@ public class Enemy : MonoBehaviour
     float _roamObstacleResolveUntil;
     float _roamStuckUntil;
     float _fleeUntilTime;
+    float _loseAggroDeadline = -1f;
     bool HasCarriedGold => _carriedGoldPickup != null && _carriedGoldPickup.amount > 0;
     bool IsFleeingFromMine => fleeAfterSteal && Time.time < _fleeUntilTime;
 
@@ -203,6 +212,36 @@ public class Enemy : MonoBehaviour
         SetAnimState(idle: true, walk: false, attack: false);
         SetSkillCharging(false);
         ResolveMineTarget();
+    }
+
+    void LateUpdate()
+    {
+        if (!clampCarriedGoldToMap || !fleeAfterSteal || !HasCarriedGold)
+            return;
+
+        Vector2 p = rb != null ? rb.position : (Vector2)transform.position;
+        Vector2 c = ClampCarriedGoldToConfiguredMap(p);
+        if ((c - p).sqrMagnitude < 1e-10f)
+            return;
+
+        if (rb != null)
+            rb.MovePosition(c);
+        else
+            transform.position = c;
+    }
+
+    static Vector2 ClampToAxisAlignedRect(Vector2 p, Vector2 minCorner, Vector2 maxCorner)
+    {
+        float minX = Mathf.Min(minCorner.x, maxCorner.x);
+        float maxX = Mathf.Max(minCorner.x, maxCorner.x);
+        float minY = Mathf.Min(minCorner.y, maxCorner.y);
+        float maxY = Mathf.Max(minCorner.y, maxCorner.y);
+        return new Vector2(Mathf.Clamp(p.x, minX, maxX), Mathf.Clamp(p.y, minY, maxY));
+    }
+
+    Vector2 ClampCarriedGoldToConfiguredMap(Vector2 p)
+    {
+        return ClampToAxisAlignedRect(p, mapClampWorldMin, mapClampWorldMax);
     }
 
     void Update()
@@ -1184,12 +1223,34 @@ public class Enemy : MonoBehaviour
     {
         if (targetPlayer != null)
         {
+            if (!targetPlayer.gameObject.activeInHierarchy)
+            {
+                targetPlayer = null;
+                _loseAggroDeadline = -1f;
+                return;
+            }
+
             float dist = Vector2.Distance(transform.position, targetPlayer.position);
             if (dist > loseAggroRange)
             {
-                if (debugMineAI)
-                    Debug.Log($"[{name}] Lose aggro player dist={dist:F2} > {loseAggroRange:F2}");
-                targetPlayer = null;
+                if (_loseAggroDeadline < 0f)
+                {
+                    _loseAggroDeadline = Time.time + Mathf.Max(0f, loseAggroPatience);
+                    if (debugMineAI)
+                        Debug.Log($"[{name}] Player out of range, start patience timer {loseAggroPatience:F2}s (dist={dist:F2} > {loseAggroRange:F2})");
+                }
+                else if (Time.time >= _loseAggroDeadline)
+                {
+                    if (debugMineAI)
+                        Debug.Log($"[{name}] Lose aggro after patience (dist={dist:F2} > {loseAggroRange:F2})");
+                    targetPlayer = null;
+                    _loseAggroDeadline = -1f;
+                }
+            }
+            else
+            {
+                // 回到追击范围内，重置耐心计时。
+                _loseAggroDeadline = -1f;
             }
             return;
         }
@@ -1215,6 +1276,7 @@ public class Enemy : MonoBehaviour
         if (best != null)
         {
             targetPlayer = best;
+            _loseAggroDeadline = -1f;
             if (debugMineAI)
                 Debug.Log($"[{name}] Acquire player dist={Vector2.Distance(transform.position, targetPlayer.position):F2}");
         }
@@ -1389,6 +1451,9 @@ public class Enemy : MonoBehaviour
             pickup = go.AddComponent<GoldPickup>();
 
         pickup.amount = amount;
+        // 携带期间：不允许被拾取、也不自动销毁。
+        pickup.autoDestroyAfter = 0f;
+        pickup.SetCarriedByEnemy(true);
 
         // 无论 prefab 如何配，强制改成可触发拾取且不受重力影响（避免掉地上堆叠）。
         EnsurePickupTrigger(go);
@@ -1405,6 +1470,22 @@ public class Enemy : MonoBehaviour
 
         if (debugMineAI)
             Debug.Log($"[{name}] GiveCarriedGoldPickup amount={amount} pickup={go.name}");
+    }
+
+    public void DropCarriedGoldOnDeath()
+    {
+        if (_carriedGoldPickup == null)
+            return;
+
+        GoldPickup pickup = _carriedGoldPickup;
+        _carriedGoldPickup = null;
+
+        Transform tr = pickup.transform;
+        tr.SetParent(null, worldPositionStays: true);
+
+        // 死亡掉落后：恢复为可拾取地面金块，并保持常驻（不自动消失）。
+        pickup.autoDestroyAfter = 0f;
+        pickup.SetCarriedByEnemy(false);
     }
 
     void SyncCarriedGoldRenderOrder(GameObject goldObj)
@@ -1512,18 +1593,6 @@ public class Enemy : MonoBehaviour
         if (d.sqrMagnitude < 0.0001f)
             d = Vector2.right;
         return d.normalized;
-    }
-
-    bool IsWithinRoamBounds(Vector2 worldPos)
-    {
-        if (roamBoundsCollider == null)
-            return true;
-
-        if (!roamBoundsCollider.bounds.Contains(worldPos))
-            return false;
-
-        // 精确判断：RoamBoundsCollider 可能是触发器或普通碰撞体，OverlapPoint 都能用
-        return roamBoundsCollider.OverlapPoint(worldPos);
     }
 
     bool TryMoveRoam(

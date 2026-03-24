@@ -25,10 +25,14 @@ public class GoldMineController : MonoBehaviour
     public bool debugMineLog = true;
 
     [Header("UI（可选）")]
-    [Tooltip("金矿 UI 进度条（fillAmount = current/max）")]
+    [Tooltip("金矿 UI 进度条（fillAmount = current/max）；留空则运行时查找 GoldHealthBar，再退回 GoldMineFill。")]
     public Image mineFillImage;
-    [Tooltip("金矿文本（示例：3/10）")]
+    [Tooltip("金矿文本（示例：3/10）；留空则运行时查找 GoldHealthText，再退回 GoldMineText。")]
     public TMP_Text mineText;
+    [Tooltip("勾选后进度条用插值跟随目标比例，偷矿时会有缩短动画。")]
+    public bool animateGoldBarFill = true;
+    [Tooltip("越大越快贴近目标 fill（仅 animateGoldBarFill 时生效）。")]
+    public float goldBarFillLerpSpeed = 12f;
 
     [Header("事件回调（可选）")]
     public UnityEvent<int, int> onGoldChanged; // 参数：current, max
@@ -46,6 +50,8 @@ public class GoldMineController : MonoBehaviour
     string _currentThiefEnemyId;
     int _currentStealHitCount;
     bool _depletedEventSent;
+    float _fillDisplay;
+    float _fillTarget;
 
     void Awake()
     {
@@ -57,7 +63,36 @@ public class GoldMineController : MonoBehaviour
             Debug.Log($"[GoldMine:{name}#{GetInstanceID()}] Awake initial={initialGold}, current={_currentGold}, max={maxGold}, stealHitsRequired={stealHitsRequired}");
         }
         TryAutoBindUI();
+        _fillTarget = maxGold > 0 ? (float)_currentGold / maxGold : 0f;
+        _fillDisplay = _fillTarget;
         RefreshUIAndNotify();
+    }
+
+    void Start()
+    {
+        // Canvas 可能比金矿晚 Awake，这里再绑一次 GoldHealthBar / GoldHealthText。
+        TryAutoBindUI();
+        _fillTarget = maxGold > 0 ? (float)_currentGold / maxGold : 0f;
+        if (!animateGoldBarFill)
+            _fillDisplay = _fillTarget;
+        RefreshUIAndNotify();
+    }
+
+    void Update()
+    {
+        if (mineFillImage == null)
+            return;
+        if (!animateGoldBarFill)
+            return;
+        if (Mathf.Approximately(_fillDisplay, _fillTarget))
+        {
+            _fillDisplay = _fillTarget;
+            mineFillImage.fillAmount = _fillDisplay;
+            return;
+        }
+
+        _fillDisplay = Mathf.Lerp(_fillDisplay, _fillTarget, Mathf.Clamp01(Time.deltaTime * goldBarFillLerpSpeed));
+        mineFillImage.fillAmount = _fillDisplay;
     }
 
     /// <summary>
@@ -139,9 +174,23 @@ public class GoldMineController : MonoBehaviour
     {
         if (mineFillImage == null)
         {
+            GameObject fillObj = GameObject.Find("GoldHealthBar");
+            if (fillObj != null)
+                mineFillImage = fillObj.GetComponent<Image>();
+        }
+
+        if (mineFillImage == null)
+        {
             GameObject fillObj = GameObject.Find("GoldMineFill");
             if (fillObj != null)
                 mineFillImage = fillObj.GetComponent<Image>();
+        }
+
+        if (mineText == null)
+        {
+            GameObject textObj = GameObject.Find("GoldHealthText");
+            if (textObj != null)
+                mineText = textObj.GetComponent<TMP_Text>();
         }
 
         if (mineText == null)
@@ -154,8 +203,20 @@ public class GoldMineController : MonoBehaviour
 
     void RefreshUIAndNotify()
     {
-        if (mineFillImage != null && maxGold > 0)
-            mineFillImage.fillAmount = (float)_currentGold / maxGold;
+        _fillTarget = maxGold > 0 ? (float)_currentGold / maxGold : 0f;
+        if (!animateGoldBarFill)
+        {
+            _fillDisplay = _fillTarget;
+            if (mineFillImage != null)
+                mineFillImage.fillAmount = _fillTarget;
+        }
+        else if (mineFillImage != null && Mathf.Abs(_fillDisplay - _fillTarget) < 0.0001f)
+        {
+            // 已与目标一致：立即刷到 Image（首帧绑定 UI、或数值未变时）
+            _fillDisplay = _fillTarget;
+            mineFillImage.fillAmount = _fillTarget;
+        }
+        // animate 且正在过渡时：fill 由 Update 每帧插值
 
         if (mineText != null)
             mineText.text = $"{_currentGold}/{maxGold}";

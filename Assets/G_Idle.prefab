@@ -100,6 +100,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   amount: 1
   pickupDelay: 0.05
+  enableAutoDestroy: 0
   autoDestroyAfter: 30
 --- !u!61 &-1298411445613677221
 BoxCollider2D:

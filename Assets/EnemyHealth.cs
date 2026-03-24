@@ -182,6 +182,10 @@ public class EnemyHealth : MonoBehaviour
 
     private void Die()
     {
+        Enemy enemy = GetComponent<Enemy>();
+        if (enemy != null)
+            enemy.DropCarriedGoldOnDeath();
+
         // 击杀时给玩家增加经验（若场景中存在 PlayerLevel）
         PlayerLevel playerLevel = FindObjectOfType<PlayerLevel>();
         if (playerLevel != null)

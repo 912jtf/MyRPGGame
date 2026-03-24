@@ -226,8 +226,9 @@ MonoBehaviour:
   attackRadius: 0.8
   attackCooldown: 2
   mineAttackDistance: 0.9
-  playerAggroRange: 3.5
+  playerAggroRange: 8
   loseAggroRange: 6
+  loseAggroPatience: 3
   goldMine: {fileID: 4546663217882423377, guid: 54069dd54202be146b2f4232eed7ae7b, type: 3}
   fallbackMineObjectName: GoldMine_Active
   enemyIdOverride: 
@@ -244,6 +245,11 @@ MonoBehaviour:
   roamDirectionChangeInterval: 3
   roamObstacleResolveCooldown: 0.25
   roamStuckDuration: 0.35
+  clampCarriedGoldToMap: 1
+  mapClampWorldMin: {x: -15.92, y: -8.79}
+  mapClampWorldMax: {x: 15.92, y: 8.78}
+  fleeAfterSteal: 1
+  spawnGoldPickupOnSteal: 0
   fleeMinDistanceFromMine: 2
   fleeMaxDuration: 15
   debugMineAI: 1
@@ -270,8 +276,8 @@ MonoBehaviour:
   useEnemy2Skill01: 1
   enemy2Skill01Prefab: {fileID: 130034253271366145, guid: 1d43f635acb7bba4886222c6def3812e, type: 3}
   enemy2Skill01SpawnPoint: {fileID: 8565366644048074121}
-  enemy2Skill01Cooldown: 4
-  enemy2Skill01MinDistance: 3
+  enemy2Skill01Cooldown: 2.5
+  enemy2Skill01MinDistance: 1.5
   enemy2Skill01MaxDistance: 15
   enemy2Skill01SpeedOverride: -1
   enemy2Skill01DamageMultiplier: 2
@@ -288,7 +294,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 57adcc832bbe4e346a863989b2e32926, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 3
+  maxHealth: 5
   expReward: 1
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1

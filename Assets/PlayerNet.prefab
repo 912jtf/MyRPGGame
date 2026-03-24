@@ -173,10 +173,10 @@ MonoBehaviour:
   speed: 5
   inputDeadZone: 0.15
   useMapBounds: 1
-  mapMinX: -15.34
-  mapMaxX: 15.34
-  mapMinY: -8.4
-  mapMaxY: 8.4
+  mapMinX: -15.92
+  mapMaxX: 15.92
+  mapMinY: -8.79
+  mapMaxY: 8.79
 --- !u!95 &1879685869537628964
 Animator:
   serializedVersion: 5
@@ -348,10 +348,26 @@ MonoBehaviour:
   maxCarry: 2
   carryCount: 0
   allowDropByKey: 1
-  dropKey: 103
-  goldPickupPrefab: {fileID: 0}
+  dropKey: 102
+  goldPickupPrefab: {fileID: 7173932451251563590, guid: 377656ca624667344845d511b0767997, type: 3}
   dropForwardDistance: 0.45
+  dropScatterRadius: 0.1
+  animatePickupMagnet: 1
+  pickupMagnetSpeed: 16
+  pickupMagnetMaxDuration: 0.85
+  pickupArriveDistance: 0.12
+  pickupMagnetTargetOffset: {x: 0, y: 0.2, z: 0}
+  pickupMagnetEndScale: 0.3
   carryText: {fileID: 0}
+  bagCapacityFillImage: {fileID: 0}
+  bagCapacityText: {fileID: 0}
+  animateBagCapacityFill: 1
+  bagCapacityFillLerpSpeed: 12
+  flashWhenBagFull: 1
+  flashOnlyWhenPickupNearby: 1
+  fullFlashInterval: 0.3
+  fullFlashDuration: 0.15
+  fullFlashColor: {r: 0.98490566, g: 0.1031433, b: 0, a: 0.40784314}
   onCarryChanged:
     m_PersistentCalls:
       m_Calls: []
