@@ -536,11 +536,11 @@ public class PlayerHealth : MonoBehaviour
 
         int sec = Mathf.CeilToInt(Mathf.Max(0f, _matchRemainingTime));
         RectTransform rt = countdownText.rectTransform;
+        bool isBoundToNamedCountdown = !string.IsNullOrWhiteSpace(countdownTextObjectName) &&
+                                       countdownText.gameObject.name == countdownTextObjectName;
+        bool shouldDrivePosition = !isBoundToNamedCountdown;
         Vector2 pos = countdownAnchoredPosition;
-        // 当倒计时绑定到命名文本（如 daojishi）时，尊重该文本手动摆放位置，不强制跟随经验条。
-        bool shouldFollowTarget = string.IsNullOrWhiteSpace(countdownTextObjectName) ||
-                                  countdownText.gameObject.name != countdownTextObjectName;
-        if (shouldFollowTarget && !string.IsNullOrWhiteSpace(countdownFollowTargetName))
+        if (shouldDrivePosition && !string.IsNullOrWhiteSpace(countdownFollowTargetName))
         {
             GameObject target = GameObject.Find(countdownFollowTargetName);
             if (target != null)
@@ -561,7 +561,8 @@ public class PlayerHealth : MonoBehaviour
                 }
             }
         }
-        rt.anchoredPosition = pos;
+        if (shouldDrivePosition)
+            rt.anchoredPosition = pos;
         if (!countdownText.gameObject.activeSelf)
             countdownText.gameObject.SetActive(true);
         countdownText.fontSize = countdownFontSize;

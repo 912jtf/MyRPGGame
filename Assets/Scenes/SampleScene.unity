@@ -866,7 +866,7 @@ Tilemap:
       - {fileID: -1240251282, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1804475712, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1686297667, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5.0000005
+      m_AnimationSpeed: 5
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: -2, y: -6, z: 0}
@@ -965,7 +965,7 @@ Tilemap:
       - {fileID: 202057282, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -1821272848, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -68792248, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5
+      m_AnimationSpeed: 5.0000005
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: 1, y: 0, z: 0}
@@ -10121,7 +10121,7 @@ MonoBehaviour:
   m_fontSizeMin: 18
   m_fontSizeMax: 72
   m_fontStyle: 0
-  m_HorizontalAlignment: 1
+  m_HorizontalAlignment: 2
   m_VerticalAlignment: 256
   m_textAlignment: 65535
   m_characterSpacing: 0
@@ -10130,7 +10130,7 @@ MonoBehaviour:
   m_lineSpacingMax: 0
   m_paragraphSpacing: 0
   m_charWidthMaxAdj: 0
-  m_enableWordWrapping: 1
+  m_enableWordWrapping: 0
   m_wordWrappingRatios: 0.4
   m_overflowMode: 0
   m_linkedTextComponent: {fileID: 0}
@@ -10150,7 +10150,7 @@ MonoBehaviour:
   m_VertexBufferAutoSizeReduction: 0
   m_useMaxVisibleDescender: 1
   m_pageToDisplay: 1
-  m_margin: {x: 0, y: 0, z: 0.000045747256, w: 0}
+  m_margin: {x: 0.6137914, y: 0, z: -1.4709471, w: 0.0473976}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
   m_hasFontAssetChanged: 0
@@ -10173,15 +10173,15 @@ RectTransform:
   m_GameObject: {fileID: 1172141175}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.5217448, y: 0.5217448, z: 0.5217448}
+  m_LocalScale: {x: 1.9166458, y: 1.9166458, z: 1.9166458}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1694943459}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 94.34346, y: 480}
-  m_SizeDelta: {x: 285.649, y: 50}
+  m_AnchoredPosition: {x: -698, y: 376.53494}
+  m_SizeDelta: {x: 224.185, y: 45.508}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1187765533
 GameObject:
@@ -12775,7 +12775,7 @@ Tilemap:
       - {fileID: 1349786135, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1634444482, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -223863132, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5
+      m_AnimationSpeed: 5.0000005
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: 0, y: -2, z: 0}
@@ -12786,7 +12786,7 @@ Tilemap:
       - {fileID: -947762310, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -359349404, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1447009894, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5
+      m_AnimationSpeed: 5.0000005
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: 2, y: -2, z: 0}
@@ -13580,6 +13580,7 @@ RectTransform:
   - {fileID: 1737021932}
   - {fileID: 330233003}
   - {fileID: 991263264}
+  - {fileID: 1172141178}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -14766,4 +14767,3 @@ SceneRoots:
   - {fileID: 2847100201}
   - {fileID: 442079720}
   - {fileID: 1142642275}
-  - {fileID: 1172141178}

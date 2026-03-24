@@ -259,17 +259,17 @@ MonoBehaviour:
   titlePulseScaleAmount: 0.08
   showCountdownText: 1
   countdownText: {fileID: 0}
-  countdownTextObjectName: MatchCountdownText
+  countdownTextObjectName: daojishi
   countdownTextColor: {r: 1, g: 1, b: 1, a: 1}
-  countdownFontSize: 44
-  countdownAnchoredPosition: {x: -15.19, y: 6.78}
-  countdownFollowTargetName: ExpBar
+  countdownFontSize: 60
+  countdownAnchoredPosition: {x: 0, y: -40}
+  countdownFollowTargetName: 
   countdownFollowOffset: {x: 0, y: 0}
   countdownBaseAlpha: 0.78
   countdownUrgencyPulse: 1
-  countdownPulseSpeed: 3.8
+  countdownPulseSpeed: 5
   countdownPulseScaleAmount: 0.06
-  countdownPulseAlphaAmount: 0.18
+  countdownPulseAlphaAmount: 0.275
   onPlayerDied:
     m_PersistentCalls:
       m_Calls: []
