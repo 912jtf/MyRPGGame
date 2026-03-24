@@ -16,6 +16,7 @@ public class DashSkillSO : SkillSO
 
     [Tooltip("与碰撞体保持的最小间隔，避免精度误差卡进墙里")]
     public float skin = 0.02f;
+    readonly RaycastHit2D[] _dashCastHits = new RaycastHit2D[16];
 
     public override void Activate(PlayerSkills owner)
     {
@@ -52,7 +53,8 @@ public class DashSkillSO : SkillSO
 
         // 先根据碰撞体修正终点，防止穿墙
         Vector3 startPos = t.position;
-        Vector3 endPos = ComputeDashEndPosition(startPos, dir.normalized);
+        Collider2D ownerCol = owner.GetComponent<Collider2D>();
+        Vector3 endPos = ComputeDashEndPosition(startPos, dir.normalized, ownerCol);
 
         // 0 或负数时，保持原来的“瞬移”感
         if (dashDuration <= 0f)
@@ -69,24 +71,49 @@ public class DashSkillSO : SkillSO
     /// 从 startPos 朝 dirNormalized 方向尝试 dashDistance 距离，
     /// 如果遇到 obstacleLayers 上的碰撞体，则终点停在碰撞点前一点。
     /// </summary>
-    private Vector3 ComputeDashEndPosition(Vector3 startPos, Vector2 dirNormalized)
+    private Vector3 ComputeDashEndPosition(Vector3 startPos, Vector2 dirNormalized, Collider2D ownerCol)
     {
-        // 没配置 Layer 时，保持原来的“直线冲刺”行为
-        if (obstacleLayers == 0)
+        float dist = Mathf.Max(0f, dashDistance);
+        if (dist <= 0f)
+            return startPos;
+
+        // 1) 优先用玩家自身碰撞体做 Cast（比 Raycast 点检测更不容易穿墙）。
+        if (ownerCol != null)
         {
-            return startPos + (Vector3)(dirNormalized * dashDistance);
+            ContactFilter2D filter = new ContactFilter2D
+            {
+                useTriggers = false,
+                useLayerMask = true
+            };
+
+            // 若未配置 obstacleLayers，默认检测所有碰撞层。
+            int mask = obstacleLayers.value != 0 ? obstacleLayers.value : Physics2D.DefaultRaycastLayers;
+            filter.SetLayerMask(mask);
+
+            int count = ownerCol.Cast(dirNormalized, filter, _dashCastHits, dist + Mathf.Max(0f, skin));
+            float nearest = float.PositiveInfinity;
+            for (int i = 0; i < count; i++)
+            {
+                RaycastHit2D h = _dashCastHits[i];
+                if (h.collider == null) continue;
+                if (h.distance <= 0.0001f) continue;
+                if (h.distance < nearest) nearest = h.distance;
+            }
+
+            if (nearest < float.PositiveInfinity)
+            {
+                float safe = Mathf.Max(0f, nearest - Mathf.Max(0f, skin));
+                return startPos + (Vector3)(dirNormalized * safe);
+            }
         }
 
-        RaycastHit2D hit = Physics2D.Raycast(startPos, dirNormalized, dashDistance, obstacleLayers);
+        // 2) 兜底：没有碰撞体时用 Raycast。
+        int rayMask = obstacleLayers.value != 0 ? obstacleLayers.value : Physics2D.DefaultRaycastLayers;
+        RaycastHit2D hit = Physics2D.Raycast(startPos, dirNormalized, dist, rayMask);
         if (hit.collider != null)
-        {
-            // 命中障碍：停在碰撞点稍微外面一点，避免卡进墙
-            Vector3 hitPoint = hit.point;
-            return hitPoint - (Vector3)(dirNormalized * skin);
-        }
+            return hit.point - dirNormalized * Mathf.Max(0f, skin);
 
-        // 没有命中障碍，正常冲刺到最大距离
-        return startPos + (Vector3)(dirNormalized * dashDistance);
+        return startPos + (Vector3)(dirNormalized * dist);
     }
 
     private System.Collections.IEnumerator DashRoutine(GameObject target, Vector3 startPos, Vector3 endPos)

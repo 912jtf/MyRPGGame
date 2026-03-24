@@ -24,6 +24,17 @@ public class PlayerGoldCarrier : MonoBehaviour
     public float dropForwardDistance = 0f;
     [Tooltip("丢弃时在玩家脚下的随机散开半径（0 表示不散开）。")]
     public float dropScatterRadius = 0.1f;
+    [Header("投递到金矿（按键）")]
+    [Tooltip("进入金矿触发范围后，按该键投递 1 块金子。")]
+    public KeyCode depositKey = KeyCode.G;
+    [Tooltip("每次按键投递的数量。")]
+    [Min(1)] public int depositPerPress = 1;
+    [Header("投递提示（矿点上方菱形）")]
+    public bool showDepositPrompt = true;
+    [Tooltip("金矿下用于提示的子物体名称（你现在用的是 GoldIsometric Diamond）。")]
+    public string depositPromptChildName = "GoldIsometric Diamond";
+    public Color depositPromptColor = new Color(1f, 0.95f, 0.3f, 1f);
+    public float depositPromptPulseSpeed = 6f;
 
     [Header("拾取动画（吸向玩家）")]
     [Tooltip("整堆拾取时先飞向玩家再入账；部分拾取（背包不够装整堆）时仍瞬间拾取。")]
@@ -70,6 +81,11 @@ public class PlayerGoldCarrier : MonoBehaviour
     Color _bagTextBaseColor = Color.white;
     bool _hasCachedBagBaseColors;
     bool _warnedMissingDropPrefab;
+    GoldMineController _nearbyMine;
+    Transform _depositPromptTransform;
+    SpriteRenderer _depositPromptRenderer;
+    Color _depositPromptBaseColor = Color.white;
+    Vector3 _depositPromptBaseScale = Vector3.one;
 
     void Awake()
     {
@@ -87,16 +103,21 @@ public class PlayerGoldCarrier : MonoBehaviour
     {
         // 防止 UI 比玩家晚初始化导致 Awake 时自动绑定失败
         TryAutoBindUI();
+        HideAllDepositPromptChildrenInScene();
         CacheBagUIBaseColors();
         RefreshUIAndNotify();
     }
 
     void Update()
     {
+        if (Input.GetKeyDown(depositKey))
+            TryDepositOneToNearbyMine();
+
         if (!allowDropByKey || !Input.GetKeyDown(dropKey))
         {
             UpdateBagFillUI();
             UpdateBagFullFlash();
+            UpdateDepositPrompt();
             return;
         }
 
@@ -106,18 +127,30 @@ public class PlayerGoldCarrier : MonoBehaviour
 
         UpdateBagFillUI();
         UpdateBagFullFlash();
+        UpdateDepositPrompt();
     }
 
     void OnTriggerEnter2D(Collider2D other)
     {
         TryPickup(other);
-        TryDeposit(other);
+
+        GoldMineController mine = GetMineFromCollider(other);
+        if (mine != null)
+            _nearbyMine = mine;
     }
 
     void OnTriggerStay2D(Collider2D other)
     {
-        // 留在矿区时持续尝试自动投递，避免只在 Enter 一帧错过。
-        TryDeposit(other);
+        GoldMineController mine = GetMineFromCollider(other);
+        if (mine != null)
+            _nearbyMine = mine;
+    }
+
+    void OnTriggerExit2D(Collider2D other)
+    {
+        GoldMineController mine = GetMineFromCollider(other);
+        if (mine != null && mine == _nearbyMine)
+            _nearbyMine = null;
     }
 
     bool TryPickup(Collider2D other)
@@ -208,18 +241,16 @@ public class PlayerGoldCarrier : MonoBehaviour
         RefreshUIAndNotify();
     }
 
-    bool TryDeposit(Collider2D other)
+    bool TryDepositOneToNearbyMine()
     {
-        if (carryCount <= 0 || other == null)
+        if (carryCount <= 0 || _nearbyMine == null)
             return false;
 
-        GoldMineController mine = other.GetComponent<GoldMineController>();
-        if (mine == null)
-            mine = other.GetComponentInParent<GoldMineController>();
-        if (mine == null)
+        if (_nearbyMine.CurrentGold >= _nearbyMine.maxGold)
             return false;
 
-        int deposited = mine.DepositFromPlayer(carryCount);
+        int tryCount = Mathf.Clamp(depositPerPress, 1, carryCount);
+        int deposited = _nearbyMine.DepositFromPlayer(tryCount);
         if (deposited <= 0)
             return false;
 
@@ -227,6 +258,16 @@ public class PlayerGoldCarrier : MonoBehaviour
         RefreshUIAndNotify();
         onDepositToMine?.Invoke(deposited);
         return true;
+    }
+
+    GoldMineController GetMineFromCollider(Collider2D other)
+    {
+        if (other == null)
+            return null;
+        GoldMineController mine = other.GetComponent<GoldMineController>();
+        if (mine == null)
+            mine = other.GetComponentInParent<GoldMineController>();
+        return mine;
     }
 
     public bool TryDropOne()
@@ -473,5 +514,90 @@ public class PlayerGoldCarrier : MonoBehaviour
             bagCapacityFillImage.color = _bagFillBaseColor;
         if (bagCapacityText != null)
             bagCapacityText.color = _bagTextBaseColor;
+    }
+
+    void UpdateDepositPrompt()
+    {
+        bool canPrompt = showDepositPrompt
+            && _nearbyMine != null
+            && carryCount > 0
+            && _nearbyMine.CurrentGold < _nearbyMine.maxGold;
+
+        if (!canPrompt)
+        {
+            HideDepositPrompt();
+            return;
+        }
+
+        EnsureDepositPromptFromMine();
+        if (_depositPromptTransform == null || _depositPromptRenderer == null)
+            return;
+
+        _depositPromptTransform.gameObject.SetActive(true);
+
+        float pulse = 0.55f + 0.45f * (0.5f + 0.5f * Mathf.Sin(Time.time * Mathf.Max(0.1f, depositPromptPulseSpeed)));
+        _depositPromptTransform.localScale = _depositPromptBaseScale * (0.9f + 0.2f * pulse);
+        Color c = _depositPromptBaseColor;
+        c.a *= pulse;
+        _depositPromptRenderer.color = c;
+    }
+
+    void EnsureDepositPromptFromMine()
+    {
+        if (_nearbyMine == null)
+            return;
+        if (_depositPromptTransform != null && _depositPromptRenderer != null && _depositPromptTransform.gameObject.activeInHierarchy)
+            return;
+
+        Transform t = _nearbyMine.transform.Find(depositPromptChildName);
+        if (t == null)
+            return;
+
+        SpriteRenderer sr = t.GetComponent<SpriteRenderer>();
+        if (sr == null)
+            sr = t.GetComponentInChildren<SpriteRenderer>(true);
+        if (sr == null)
+            return;
+
+        _depositPromptTransform = t;
+        _depositPromptRenderer = sr;
+        _depositPromptBaseColor = sr.color;
+        _depositPromptBaseScale = t.localScale;
+    }
+
+    void OnDisable()
+    {
+        HideDepositPrompt();
+    }
+
+    void OnDestroy()
+    {
+        HideDepositPrompt();
+    }
+
+    void HideDepositPrompt()
+    {
+        if (_depositPromptTransform == null)
+            return;
+        _depositPromptTransform.gameObject.SetActive(false);
+        _depositPromptTransform.localScale = _depositPromptBaseScale;
+        if (_depositPromptRenderer != null)
+            _depositPromptRenderer.color = _depositPromptBaseColor;
+    }
+
+    void HideAllDepositPromptChildrenInScene()
+    {
+        GoldMineController[] mines = FindObjectsOfType<GoldMineController>(true);
+        if (mines == null || mines.Length == 0)
+            return;
+
+        for (int i = 0; i < mines.Length; i++)
+        {
+            GoldMineController mine = mines[i];
+            if (mine == null) continue;
+            Transform t = mine.transform.Find(depositPromptChildName);
+            if (t == null) continue;
+            t.gameObject.SetActive(false);
+        }
     }
 }
