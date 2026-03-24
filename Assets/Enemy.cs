@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 /// <summary>
 /// 简单 2D 敌人 AI：发现玩家 → 追踪玩家 → 攻击玩家（只控制动画，不做伤害计算）。
@@ -26,6 +27,10 @@ public class Enemy : MonoBehaviour
     public float loseAggroRange = 6f;
     [Tooltip("玩家超出 loseAggroRange 后，额外追击的耐心时间（秒）。到时仍超出才真正脱战回矿。")]
     public float loseAggroPatience = 3f;
+    [Tooltip("开启后：玩家在高地排序层级时，敌人视为丢失目标，转而追金矿。")]
+    public bool loseSightWhenPlayerOnHighGround = true;
+    [Tooltip("玩家 SpriteRenderer.sortingOrder 大于等于该值时，视为进入高地。")]
+    public int playerHighGroundSortingOrderThreshold = 15;
 
     [Header("金矿目标")]
     public GoldMineController goldMine;
@@ -196,12 +201,18 @@ public class Enemy : MonoBehaviour
         spriteRenderer = GetComponent<SpriteRenderer>();
         bodyCollider = GetComponent<CapsuleCollider2D>();
 
-        // 墙体(Default) + 其它野怪(Enemy)：用身体 Collider 做 Cast，不会误判自己的碰撞体
-        int mask = 0;
-        int layerDefault = LayerMask.NameToLayer("Default");
-        int layerEnemy = LayerMask.NameToLayer("Enemy");
-        if (layerDefault >= 0) mask |= 1 << layerDefault;
-        if (layerEnemy >= 0) mask |= 1 << layerEnemy;
+        // 用 Enemy 图层的物理碰撞矩阵来决定“什么会挡路”。
+        // 这样 Collision-High/Collision-low 等地图层若与 Enemy 勾选了碰撞，就会自动参与阻挡。
+        int myLayer = gameObject.layer;
+        int mask = Physics2D.GetLayerCollisionMask(myLayer);
+        if (mask == 0)
+        {
+            // 兜底：至少保留默认层 + 敌人层，避免配置异常时完全不检测。
+            int layerDefault = LayerMask.NameToLayer("Default");
+            int layerEnemy = LayerMask.NameToLayer("Enemy");
+            if (layerDefault >= 0) mask |= 1 << layerDefault;
+            if (layerEnemy >= 0) mask |= 1 << layerEnemy;
+        }
         pathBlockFilter = new ContactFilter2D
         {
             useLayerMask = true,
@@ -986,10 +997,15 @@ public class Enemy : MonoBehaviour
             if (hit.distance <= 0.001f)
                 continue;
 
-            // 为减少误判：当命中的法线几乎是上下方向（通常是地面/平台），
-            // 忽略它。否则会在离开金矿边缘/走路贴地时把地面当成前方障碍。
-            // direction.y 不一定严格为 0，所以这里放宽阈值。
-            if (Mathf.Abs(direction.y) < 0.25f && Mathf.Abs(hit.normal.y) > 0.5f)
+            // 为减少误判：水平移动时，地面型命中可忽略。
+            // 但高低地边界/地图边界必须视为阻挡，否则会“卡一会儿后挤进高地”。
+            bool isElevationOrBoundary =
+                c is TilemapCollider2D ||
+                (c.gameObject != null && (
+                    c.gameObject.name.IndexOf("collision-high", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    c.gameObject.name.IndexOf("collision-low", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    c.gameObject.name.IndexOf("boundary", System.StringComparison.OrdinalIgnoreCase) >= 0));
+            if (!isElevationOrBoundary && Mathf.Abs(direction.y) < 0.25f && Mathf.Abs(hit.normal.y) > 0.5f)
                 continue;
 
             // 记录最近一次真正“挡路”的碰撞体信息，供 UpdateRoam 离开阶段总结输出。
@@ -1223,6 +1239,15 @@ public class Enemy : MonoBehaviour
     {
         if (targetPlayer != null)
         {
+            if (loseSightWhenPlayerOnHighGround && IsPlayerOnHighGround(targetPlayer))
+            {
+                if (debugMineAI)
+                    Debug.Log($"[{name}] Lose aggro: player on high ground.");
+                targetPlayer = null;
+                _loseAggroDeadline = -1f;
+                return;
+            }
+
             if (!targetPlayer.gameObject.activeInHierarchy)
             {
                 targetPlayer = null;
@@ -1265,6 +1290,8 @@ public class Enemy : MonoBehaviour
         foreach (GameObject player in players)
         {
             if (player == null) continue;
+            if (loseSightWhenPlayerOnHighGround && IsPlayerOnHighGround(player.transform))
+                continue;
             float sqr = ((Vector2)player.transform.position - self).sqrMagnitude;
             if (sqr <= bestSqr)
             {
@@ -1280,6 +1307,16 @@ public class Enemy : MonoBehaviour
             if (debugMineAI)
                 Debug.Log($"[{name}] Acquire player dist={Vector2.Distance(transform.position, targetPlayer.position):F2}");
         }
+    }
+
+    bool IsPlayerOnHighGround(Transform playerTr)
+    {
+        if (playerTr == null)
+            return false;
+        SpriteRenderer sr = playerTr.GetComponentInChildren<SpriteRenderer>();
+        if (sr == null)
+            return false;
+        return sr.sortingOrder >= playerHighGroundSortingOrderThreshold;
     }
 
     string GetEnemyId()

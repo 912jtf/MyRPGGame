@@ -41,6 +41,6 @@ public class Elevation_Exit : MonoBehaviour
         }
 
         SpriteRenderer sr = collision.GetComponentInChildren<SpriteRenderer>();
-        if (sr != null) sr.sortingOrder = 5;
+        if (sr != null) sr.sortingOrder = 10;
     }
 }
