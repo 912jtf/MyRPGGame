@@ -244,6 +244,32 @@ MonoBehaviour:
   healthText: {fileID: 0}
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
+  deadSprite: {fileID: 1193996438, guid: 49bf44a33c6bb1546bdfbe75e1773f33, type: 3}
+  deadSpriteName: Dead_9
+  showGameOverGrayOverlay: 1
+  gameOverOverlayColor: {r: 0.2, g: 0.2, b: 0.2, a: 0.58}
+  gameOverTitle: Game Over
+  gameOverButtonSize: {x: 300, y: 78}
+  matchDurationSeconds: 90
+  goldMineController: {fileID: 0}
+  failTitle: Game Over
+  successTitle: Victory!
+  successTitleColor: {r: 1, g: 0.92, b: 0.3, a: 1}
+  titlePulseSpeed: 4.2
+  titlePulseScaleAmount: 0.08
+  showCountdownText: 1
+  countdownText: {fileID: 0}
+  countdownTextObjectName: MatchCountdownText
+  countdownTextColor: {r: 1, g: 1, b: 1, a: 1}
+  countdownFontSize: 44
+  countdownAnchoredPosition: {x: -15.19, y: 6.78}
+  countdownFollowTargetName: ExpBar
+  countdownFollowOffset: {x: 0, y: 0}
+  countdownBaseAlpha: 0.78
+  countdownUrgencyPulse: 1
+  countdownPulseSpeed: 3.8
+  countdownPulseScaleAmount: 0.06
+  countdownPulseAlphaAmount: 0.18
   onPlayerDied:
     m_PersistentCalls:
       m_Calls: []
@@ -352,6 +378,12 @@ MonoBehaviour:
   goldPickupPrefab: {fileID: 7173932451251563590, guid: 377656ca624667344845d511b0767997, type: 3}
   dropForwardDistance: 0.45
   dropScatterRadius: 0.1
+  depositKey: 103
+  depositPerPress: 1
+  showDepositPrompt: 1
+  depositPromptChildName: GoldIsometric Diamond
+  depositPromptColor: {r: 1, g: 0.95, b: 0.3, a: 1}
+  depositPromptPulseSpeed: 6
   animatePickupMagnet: 1
   pickupMagnetSpeed: 16
   pickupMagnetMaxDuration: 0.85
