@@ -25,6 +25,7 @@ public class DialogueManager : MonoBehaviour
     int currentLineIndex;
     bool isDialogueActive;
     bool waitingForChoice;
+    int[] buttonToChoiceIndex;
 
     /// <summary>
     /// 外部可读，用于判断当前是否在对话中
@@ -49,6 +50,7 @@ public class DialogueManager : MonoBehaviour
                 choiceButtons[index].onClick.AddListener(() => OnChoiceClicked(index));
             }
         }
+        buttonToChoiceIndex = new int[choiceButtons.Count];
 
         SetChoicesVisible(false);
 
@@ -63,6 +65,9 @@ public class DialogueManager : MonoBehaviour
     {
         if (!isDialogueActive || waitingForChoice)
             return;
+
+        // 兜底：不在选择阶段时，选项区必须隐藏。
+        SetChoicesVisible(false);
 
         if (Input.GetKeyDown(nextKey))
         {
@@ -88,6 +93,7 @@ public class DialogueManager : MonoBehaviour
         currentNode = rootNode;
         currentLineIndex = 0;
 
+        ApplyNodeEffects(currentNode);
         RefreshNpcUI();
         ShowCurrentLine();
     }
@@ -175,6 +181,10 @@ public class DialogueManager : MonoBehaviour
     {
         waitingForChoice = true;
         SetChoicesVisible(true);
+        for (int i = 0; i < buttonToChoiceIndex.Length; i++)
+            buttonToChoiceIndex[i] = -1;
+
+        int choiceCursor = 0;
 
         for (int i = 0; i < choiceButtons.Count; i++)
         {
@@ -183,17 +193,19 @@ public class DialogueManager : MonoBehaviour
 
             if (currentNode != null &&
                 currentNode.choices != null &&
-                i < currentNode.choices.Count &&
-                currentNode.choices[i] != null)
+                choiceCursor < currentNode.choices.Count &&
+                currentNode.choices[choiceCursor] != null)
             {
                 choiceButtons[i].gameObject.SetActive(true);
+                buttonToChoiceIndex[i] = choiceCursor;
 
                 // 查找按钮上的文本组件（TextMeshProUGUI 或 Text）
                 TMP_Text tmp = choiceButtons[i].GetComponentInChildren<TMP_Text>();
                 if (tmp != null)
                 {
-                    tmp.text = currentNode.choices[i].optionText;
+                    tmp.text = currentNode.choices[choiceCursor].optionText;
                 }
+                choiceCursor++;
             }
             else
             {
@@ -204,15 +216,22 @@ public class DialogueManager : MonoBehaviour
 
     void OnChoiceClicked(int index)
     {
+        // 点下选项后立刻收起所有选项，只保留分支对话文本
+        waitingForChoice = false;
+        SetChoicesVisible(false);
+
+        if (buttonToChoiceIndex == null || index < 0 || index >= buttonToChoiceIndex.Length)
+            return;
+        int choiceIndex = buttonToChoiceIndex[index];
         if (currentNode == null ||
             currentNode.choices == null ||
-            index < 0 ||
-            index >= currentNode.choices.Count)
+            choiceIndex < 0 ||
+            choiceIndex >= currentNode.choices.Count)
         {
             return;
         }
 
-        DialogueSO nextNode = currentNode.choices[index].nextNode;
+        DialogueSO nextNode = currentNode.choices[choiceIndex].nextNode;
 
         if (nextNode == null)
         {
@@ -231,8 +250,22 @@ public class DialogueManager : MonoBehaviour
         waitingForChoice = false;
 
         SetChoicesVisible(false);
+        ApplyNodeEffects(currentNode);
         RefreshNpcUI();
         ShowCurrentLine();
+    }
+
+    void ApplyNodeEffects(DialogueSO node)
+    {
+        if (node == null)
+            return;
+
+        if (node.healPlayerToFullOnEnter)
+        {
+            PlayerHealth ph = FindObjectOfType<PlayerHealth>();
+            if (ph != null)
+                ph.Heal(ph.maxHealth);
+        }
     }
 
     void EndDialogue()
@@ -260,6 +293,16 @@ public class DialogueManager : MonoBehaviour
         if (choicesGroup != null)
         {
             choicesGroup.SetActive(visible);
+        }
+
+        // 兜底：有些场景里按钮并不挂在 choicesGroup 下，需单独控制可见性。
+        if (!visible && choiceButtons != null)
+        {
+            for (int i = 0; i < choiceButtons.Count; i++)
+            {
+                if (choiceButtons[i] != null)
+                    choiceButtons[i].gameObject.SetActive(false);
+            }
         }
     }
 }

@@ -18,8 +18,9 @@ MonoBehaviour:
 
     how are you '
   next: {fileID: 0}
+  healPlayerToFullOnEnter: 0
   choices:
   - optionText: hi
     nextNode: {fileID: 11400000, guid: bd591bd206cbeca4aba35bc5a3a49d21, type: 2}
-  - optionText: ...
+  - optionText: Heal my HP, please.
     nextNode: {fileID: 11400000, guid: 5774c35015bfad64a9e2c9d35a56c932, type: 2}

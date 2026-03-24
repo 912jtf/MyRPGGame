@@ -15,6 +15,10 @@ public class DialogueSO : ScriptableObject
     [Header("线性下一句（无分支时使用，可选）")]
     public DialogueSO next;
 
+    [Header("节点效果（可选）")]
+    [Tooltip("进入该节点时将玩家生命值回满。")]
+    public bool healPlayerToFullOnEnter = false;
+
     [Header("分支选项（可为空）")]
     public List<DialogueChoice> choices = new List<DialogueChoice>();
 

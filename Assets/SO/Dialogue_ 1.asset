@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   npc: {fileID: 11400000, guid: 6d7056e30756541449c0edc584f05606, type: 2}
   lines:
-  - hi
+  - Hi, brave warrior.
   next: {fileID: 0}
+  healPlayerToFullOnEnter: 0
   choices: []
