@@ -85,12 +85,39 @@ public class WorldGoldScatterSpawner : MonoBehaviour
             pos = SampleRandomPointInArea();
             if (!useObstacleCheck || obstacleLayers.value == 0)
                 return true;
-            if (Physics2D.OverlapCircle(pos, spawnCheckRadius, obstacleLayers) == null)
+            if (!IsBlockedByObstacle(pos))
                 return true;
         }
 
         pos = SampleRandomPointInArea();
         return true;
+    }
+
+    bool IsBlockedByObstacle(Vector2 pos)
+    {
+        Collider2D[] hits = Physics2D.OverlapCircleAll(pos, spawnCheckRadius, obstacleLayers);
+        if (hits == null || hits.Length == 0)
+            return false;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider2D c = hits[i];
+            if (c == null || !c.enabled || c.isTrigger)
+                continue;
+
+            // 仅允许刷在高台层；低台层仍按障碍处理。
+            string n = c.gameObject.name;
+            if (!string.IsNullOrEmpty(n))
+            {
+                string lower = n.ToLowerInvariant();
+                if (lower.Contains("collision-high"))
+                    continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     Vector2 SampleRandomPointInArea()
