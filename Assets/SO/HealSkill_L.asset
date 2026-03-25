@@ -18,3 +18,5 @@ MonoBehaviour:
   healAmount: 1
   healEffectPrefab: {fileID: 2769371326490797523, guid: 9ae7121a8cbe4d549b478e09f0af2705, type: 3}
   effectOffset: {x: 0, y: 0, z: 0}
+  castSfx: {fileID: 8300000, guid: ccc25d58aac8d13428c12044619ac6d7, type: 3}
+  castSfxVolume: 1

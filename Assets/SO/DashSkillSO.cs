@@ -18,6 +18,10 @@ public class DashSkillSO : SkillSO
     public float skin = 0.02f;
     readonly RaycastHit2D[] _dashCastHits = new RaycastHit2D[16];
 
+    [Header("音效（可选）")]
+    public AudioClip castSfx;
+    [Range(0f, 1f)] public float castSfxVolume = 1f;
+
     public override void Activate(PlayerSkills owner)
     {
         if (owner == null) return;
@@ -50,6 +54,8 @@ public class DashSkillSO : SkillSO
         }
 
         if (dir.sqrMagnitude < 0.001f) return;
+
+        CombatSfxUtil.Play2D(castSfx, t.position, castSfxVolume);
 
         // 先根据碰撞体修正终点，防止穿墙
         Vector3 startPos = t.position;

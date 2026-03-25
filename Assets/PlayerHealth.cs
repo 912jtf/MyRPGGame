@@ -1,4 +1,5 @@
 using System;
+using Mirror;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
@@ -18,6 +19,10 @@ public class PlayerHealth : MonoBehaviour
     [Header("受击表现")]
     public Color hurtColor = Color.red;
     public float hurtFlashTime = 0.1f;
+    [Header("音效（拖入 AudioClip；留空则静音）")]
+    [Tooltip("本地玩家受伤时播放（联机时仅本机听到）")]
+    public AudioClip hurtSfx;
+    [Range(0f, 1f)] public float hurtSfxVolume = 1f;
     [Header("死亡表现")]
     [Tooltip("玩家死亡时切换到该图片（建议拖 Dead_9）。")]
     public Sprite deadSprite;
@@ -183,6 +188,10 @@ public class PlayerHealth : MonoBehaviour
         }
 
         UpdateHealthUI();
+
+        NetworkIdentity ni = GetComponent<NetworkIdentity>();
+        if (ni == null || ni.isLocalPlayer)
+            CombatSfxUtil.Play2D(hurtSfx, transform.position, hurtSfxVolume);
 
         if (currentHealth <= 0)
         {

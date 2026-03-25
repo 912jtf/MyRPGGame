@@ -106,6 +106,10 @@ MonoBehaviour:
   mineText: {fileID: 0}
   animateGoldBarFill: 1
   goldBarFillLerpSpeed: 12
+  mineHitByEnemySfx: {fileID: 8300000, guid: 5f275954d636f5e418ffa177f8583756, type: 3}
+  mineHitByEnemySfxVolume: 1
+  mineDepositSfx: {fileID: 8300000, guid: 0990f1053ccef8c489a89da747d57363, type: 3}
+  mineDepositSfxVolume: 1
   onGoldChanged:
     m_PersistentCalls:
       m_Calls: []

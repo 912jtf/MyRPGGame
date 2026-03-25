@@ -46,6 +46,11 @@ public class PlayerGoldCarrier : MonoBehaviour
     [Tooltip("靠近玩家时缩小到该比例，增强吸入感；设为 1 关闭缩放。")]
     [Range(0.05f, 1f)] public float pickupMagnetEndScale = 0.3f;
 
+    [Header("音效（拖入 AudioClip；留空则静音）")]
+    [Tooltip("玩家成功拾取到金块（含吸附拾取）时播放。")]
+    public AudioClip pickupGoldSfx;
+    [Range(0f, 1f)] public float pickupGoldSfxVolume = 1f;
+
     [Header("UI（可选）")]
     public TMP_Text carryText;
     [Tooltip("背包容量进度条（fillAmount = carryCount / maxCarry）。留空会自动找 BagCapacityBar。")]
@@ -187,6 +192,7 @@ public class PlayerGoldCarrier : MonoBehaviour
         else
             pickup.amount = amount - take;
 
+        CombatSfxUtil.Play2D(pickupGoldSfx, transform.position, pickupGoldSfxVolume);
         RefreshUIAndNotify();
         return true;
     }
@@ -237,6 +243,7 @@ public class PlayerGoldCarrier : MonoBehaviour
             yield break;
 
         carryCount += take;
+        CombatSfxUtil.Play2D(pickupGoldSfx, transform.position, pickupGoldSfxVolume);
         pickup.Consume();
         RefreshUIAndNotify();
     }

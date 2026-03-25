@@ -13,6 +13,10 @@ public class EnemyHealth : MonoBehaviour
     public Color hurtColor = Color.red;
     public float hurtFlashTime = 0.1f;
 
+    [Header("音效（拖入 AudioClip；留空则静音）")]
+    public AudioClip hurtSfx;
+    [Range(0f, 1f)] public float hurtSfxVolume = 1f;
+
     [Header("血量条 UI")]
     [Tooltip("敌人的头像图片，用于在血量条中显示")]
     public Sprite enemyIcon;
@@ -139,6 +143,8 @@ public class EnemyHealth : MonoBehaviour
         {
             currentHealth = 0f;
         }
+
+        CombatSfxUtil.Play2D(hurtSfx, transform.position, hurtSfxVolume);
 
         // 受击闪红
         if (spriteRenderer != null)

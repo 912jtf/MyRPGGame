@@ -965,7 +965,7 @@ Tilemap:
       - {fileID: 202057282, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -1821272848, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -68792248, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5.0000005
+      m_AnimationSpeed: 5
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: 1, y: 0, z: 0}
@@ -9947,7 +9947,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 15
   m_Sprite: {fileID: 1193996438, guid: 49bf44a33c6bb1546bdfbe75e1773f33, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -9968,7 +9968,7 @@ Transform:
   m_GameObject: {fileID: 1142642273}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -15.19, y: 6.78, z: 0}
+  m_LocalPosition: {x: 1.01, y: 6.3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -10904,6 +10904,56 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1437369093}
   m_CullTransparentMesh: 1
+--- !u!1 &1448305577
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1448305579}
+  - component: {fileID: 1448305578}
+  m_Layer: 0
+  m_Name: BGM
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1448305578
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1448305577}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3bfd0fe939190a34a8b4b7aecd88d795, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  bgmClip: {fileID: 8300000, guid: f3bdaff1d568df2449abc8d6e31287e0, type: 3}
+  volume: 0.022
+  playOnStart: 1
+  loop: 1
+  dontDestroyOnLoad: 1
+  singleton: 1
+--- !u!4 &1448305579
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1448305577}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -1.8376386, y: 0.4668256, z: -0.09713465}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1465700216
 GameObject:
   m_ObjectHideFlags: 0
@@ -12775,7 +12825,7 @@ Tilemap:
       - {fileID: 1349786135, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1634444482, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -223863132, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5.0000005
+      m_AnimationSpeed: 5
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: 0, y: -2, z: 0}
@@ -12786,7 +12836,7 @@ Tilemap:
       - {fileID: -947762310, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -359349404, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1447009894, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5.0000005
+      m_AnimationSpeed: 5
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: 2, y: -2, z: 0}
@@ -14767,3 +14817,4 @@ SceneRoots:
   - {fileID: 2847100201}
   - {fileID: 442079720}
   - {fileID: 1142642275}
+  - {fileID: 1448305579}

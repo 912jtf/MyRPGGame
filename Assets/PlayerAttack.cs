@@ -40,6 +40,14 @@ public class PlayerAttack : MonoBehaviour
     [Header("安全保护")]
     public float maxAttackTime = 1f;
 
+    [Header("音效（拖入 AudioClip；留空则静音）")]
+    [Tooltip("轻击第 1、2 段挥砍")]
+    public AudioClip lightAttackSfx;
+    [Tooltip("重击挥砍")]
+    public AudioClip heavyAttackSfx;
+    [Range(0f, 1f)] public float lightAttackSfxVolume = 1f;
+    [Range(0f, 1f)] public float heavyAttackSfxVolume = 1f;
+
     private Animator animator;
     private SpriteRenderer spriteRenderer;
     private NetworkIdentity _netIdentity;
@@ -121,7 +129,9 @@ public class PlayerAttack : MonoBehaviour
             }
             else if (_currentAttackIsHeavy)
             {
+                // 预输入窗口必须覆盖整段重击，否则 OnAttackEnd 时 buffer 早已过期，会感觉“重击后按 J 僵直”。
                 _bufferWantsLight = true;
+                _bufferExpireTime = Time.time + inputBufferTime + maxHeavyAttackTime;
             }
             else if (animator != null)
             {
@@ -156,7 +166,34 @@ public class PlayerAttack : MonoBehaviour
                 animator.SetBool("isHeavyAttack", false);
             animator.SetInteger("ComboStep", Mathf.Clamp(comboStep, 1, 2));
             animator.SetBool("isattacking", true);
+            // 与 L2 / 重击一致：强制从当前状态（含重击收招尾帧）立刻切到 L1，避免先 Exit→Idle 再排队进 L1 造成的僵直感。
+            if (Mathf.Clamp(comboStep, 1, 2) == 1)
+                animator.Play("Attack_L1", 0, 0f);
         }
+
+        if (Mathf.Clamp(comboStep, 1, 2) == 1)
+            PlayLightAttackSfx();
+    }
+
+    void PlayLightAttackSfx()
+    {
+        if (!ShouldPlayLocalPlayerSfx())
+            return;
+        CombatSfxUtil.Play2D(lightAttackSfx, transform.position, lightAttackSfxVolume);
+    }
+
+    void PlayHeavyAttackSfx()
+    {
+        if (!ShouldPlayLocalPlayerSfx())
+            return;
+        CombatSfxUtil.Play2D(heavyAttackSfx, transform.position, heavyAttackSfxVolume);
+    }
+
+    bool ShouldPlayLocalPlayerSfx()
+    {
+        if (_netIdentity == null)
+            return true;
+        return _netIdentity.isLocalPlayer;
     }
 
     private void ForceEndAttack()
@@ -267,6 +304,7 @@ public class PlayerAttack : MonoBehaviour
                     animator.SetBool("isHeavyAttack", false);
                 animator.SetBool("isattacking", true);
                 animator.Play("Attack_L2", 0, 0f);
+                PlayLightAttackSfx();
                 if (hitbox != null)
                 {
                     hitbox.HitboxEnd();
@@ -286,6 +324,7 @@ public class PlayerAttack : MonoBehaviour
                 animator.SetInteger("ComboStep", 3);
                 animator.SetBool("isattacking", true);
                 animator.Play("Attack_heavy", 0, 0f);
+                PlayHeavyAttackSfx();
                 if (hitbox != null)
                 {
                     hitbox.HitboxEnd();

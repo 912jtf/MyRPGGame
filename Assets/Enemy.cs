@@ -97,6 +97,14 @@ public class Enemy : MonoBehaviour
     public LayerMask playerLayer;         // 只勾选 Player 层
     public float attackDamage = 1f;          // 对玩家造成的伤害值
 
+    [Header("音效（拖入 AudioClip；留空则静音）")]
+    [Tooltip("近战攻击动画命中帧（OnAttackHit），打玩家时播放；偷矿攻击不播")]
+    public AudioClip meleeAttackSfx;
+    [Tooltip("enemy2 技能弹丸生成瞬间（SpawnEnemy2Skill01）")]
+    public AudioClip skillCastSfx;
+    [Range(0f, 1f)] public float meleeAttackSfxVolume = 1f;
+    [Range(0f, 1f)] public float skillCastSfxVolume = 1f;
+
     [Header("寻路阻挡调试（可选）")]
     [Tooltip("打开后：当 IsPathBlocked 命中障碍时打印是哪一个 Collider 在挡路。")]
     public bool debugPathBlocked = false;
@@ -706,6 +714,8 @@ public class Enemy : MonoBehaviour
             proj.InitToDestination(targetPosNow, speedOverride);
             proj.damage = Mathf.RoundToInt(attackDamage * enemy2Skill01DamageMultiplier);
         }
+
+        CombatSfxUtil.Play2D(skillCastSfx, spawnPos, skillCastSfxVolume);
     }
 
     void UpdateCooldown()
@@ -856,6 +866,8 @@ public class Enemy : MonoBehaviour
             TryMineStealHit();
             return;
         }
+
+        CombatSfxUtil.Play2D(meleeAttackSfx, transform.position, meleeAttackSfxVolume);
 
         // 以敌人当前位置为圆心进行范围检测
         Vector2 center = transform.position;

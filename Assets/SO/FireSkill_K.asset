@@ -21,3 +21,5 @@ MonoBehaviour:
   rotateSpeed: 270
   duration: 2
   damage: 1
+  castSfx: {fileID: 8300000, guid: 23e4fb41519d2ea4c934863a2f65ff64, type: 3}
+  castSfxVolume: 1

@@ -227,6 +227,10 @@ MonoBehaviour:
   attackKey: 106
   inputBufferTime: 0.18
   maxAttackTime: 1
+  lightAttackSfx: {fileID: 8300000, guid: 4a1464307c3228049859f27716ef0dec, type: 3}
+  heavyAttackSfx: {fileID: 8300000, guid: 51feee0f101f6814d88135a3622c4025, type: 3}
+  lightAttackSfxVolume: 1
+  heavyAttackSfxVolume: 1
 --- !u!114 &83389432439665805
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -244,6 +248,8 @@ MonoBehaviour:
   healthText: {fileID: 0}
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
+  hurtSfx: {fileID: 8300000, guid: 85e499fb60c82624f9719bc430707ec2, type: 3}
+  hurtSfxVolume: 1
   deadSprite: {fileID: 1193996438, guid: 49bf44a33c6bb1546bdfbe75e1773f33, type: 3}
   deadSpriteName: Dead_9
   showGameOverGrayOverlay: 1
@@ -390,6 +396,8 @@ MonoBehaviour:
   pickupArriveDistance: 0.12
   pickupMagnetTargetOffset: {x: 0, y: 0.2, z: 0}
   pickupMagnetEndScale: 0.3
+  pickupGoldSfx: {fileID: 8300000, guid: 1ff6167ecdcc6424db28d07b6966288b, type: 3}
+  pickupGoldSfxVolume: 1
   carryText: {fileID: 0}
   bagCapacityFillImage: {fileID: 0}
   bagCapacityText: {fileID: 0}

@@ -11,6 +11,10 @@ public class FireSkillSO : SkillSO
     public float duration = 3f;
     public int damage = 1;
 
+    [Header("音效（可选）")]
+    public AudioClip castSfx;
+    [Range(0f, 1f)] public float castSfxVolume = 1f;
+
     public override void Activate(PlayerSkills owner)
     {
         if (firePrefab == null || owner == null) return;
@@ -19,6 +23,8 @@ public class FireSkillSO : SkillSO
         if (center == null) return;
 
         if (fireCount <= 0) fireCount = 3;
+
+        CombatSfxUtil.Play2D(castSfx, center.position, castSfxVolume);
 
         float deltaAngle = 360f / fireCount;
 

@@ -10,9 +10,15 @@ public class HealSkillSO : SkillSO
     public GameObject healEffectPrefab;
     public Vector3 effectOffset = Vector3.zero;
 
+    [Header("音效（可选）")]
+    public AudioClip castSfx;
+    [Range(0f, 1f)] public float castSfxVolume = 1f;
+
     public override void Activate(PlayerSkills owner)
     {
         if (owner == null) return;
+
+        CombatSfxUtil.Play2D(castSfx, owner.transform.position, castSfxVolume);
 
         PlayerHealth playerHealth = owner.GetComponent<PlayerHealth>();
         if (playerHealth != null && healAmount > 0)

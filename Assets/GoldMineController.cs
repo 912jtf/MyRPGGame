@@ -34,6 +34,14 @@ public class GoldMineController : MonoBehaviour
     [Tooltip("越大越快贴近目标 fill（仅 animateGoldBarFill 时生效）。")]
     public float goldBarFillLerpSpeed = 12f;
 
+    [Header("音效（拖入 AudioClip；留空则静音）")]
+    [Tooltip("野怪成功偷走 1 金时播放。")]
+    public AudioClip mineHitByEnemySfx;
+    [Range(0f, 1f)] public float mineHitByEnemySfxVolume = 1f;
+    [Tooltip("玩家成功投递金块到金矿时播放。")]
+    public AudioClip mineDepositSfx;
+    [Range(0f, 1f)] public float mineDepositSfxVolume = 1f;
+
     [Header("事件回调（可选）")]
     public UnityEvent<int, int> onGoldChanged; // 参数：current, max
     public UnityEvent onMineDepleted;
@@ -128,6 +136,7 @@ public class GoldMineController : MonoBehaviour
 
         _currentStealHitCount = 0;
         _currentGold = Mathf.Max(0, _currentGold - 1);
+        CombatSfxUtil.Play2D(mineHitByEnemySfx, transform.position, mineHitByEnemySfxVolume);
         if (debugMineLog)
             Debug.Log($"[GoldMine:{name}#{GetInstanceID()}] STEAL SUCCESS enemyId={enemyId}, current={_currentGold}/{maxGold}");
         RefreshUIAndNotify();
@@ -147,7 +156,10 @@ public class GoldMineController : MonoBehaviour
         int added = _currentGold - before;
 
         if (added > 0)
+        {
+            CombatSfxUtil.Play2D(mineDepositSfx, transform.position, mineDepositSfxVolume);
             RefreshUIAndNotify();
+        }
 
         return added;
     }

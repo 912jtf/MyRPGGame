@@ -229,6 +229,8 @@ MonoBehaviour:
   playerAggroRange: 8
   loseAggroRange: 6
   loseAggroPatience: 3
+  loseSightWhenPlayerOnHighGround: 1
+  playerHighGroundSortingOrderThreshold: 15
   goldMine: {fileID: 4546663217882423377, guid: 54069dd54202be146b2f4232eed7ae7b, type: 3}
   fallbackMineObjectName: GoldMine_Active
   enemyIdOverride: 
@@ -259,6 +261,10 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 128
   attackDamage: 0.5
+  meleeAttackSfx: {fileID: 0}
+  skillCastSfx: {fileID: 0}
+  meleeAttackSfxVolume: 1
+  skillCastSfxVolume: 1
   debugPathBlocked: 1
   debugPathBlockedLogInterval: 0.5
   debugFleeBlockSummary: 1
@@ -298,6 +304,8 @@ MonoBehaviour:
   expReward: 1
   hurtColor: {r: 1, g: 0, b: 0, a: 1}
   hurtFlashTime: 0.1
+  hurtSfx: {fileID: 8300000, guid: 591d613e74befc245b2f50d3e1917fbe, type: 3}
+  hurtSfxVolume: 1
   enemyIcon: {fileID: 1553159203, guid: 74d78ac966fbe3a4f81282e260209e37, type: 3}
   enemyIconSizeMultiplier: 0.5
 --- !u!1 &7345230727590300570
