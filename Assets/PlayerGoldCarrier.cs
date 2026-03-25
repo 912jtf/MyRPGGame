@@ -33,6 +33,9 @@ public class PlayerGoldCarrier : NetworkBehaviour
     [Min(0)] [SyncVar(hook = nameof(OnCarryCountChanged))]
     public int carryCount = 0;
 
+    // 最近一次“拾取成功”的世界坐标（由服务器写入，本地玩家用来播音效/特效）
+    [SyncVar] Vector2 _lastPickupWorldPos;
+
     [Header("丢弃设置（可选）")]
     public bool allowDropByKey = true;
     public KeyCode dropKey = KeyCode.F;
@@ -66,6 +69,12 @@ public class PlayerGoldCarrier : NetworkBehaviour
     [Tooltip("玩家成功拾取到金块（含吸附拾取）时播放。")]
     public AudioClip pickupGoldSfx;
     [Range(0f, 1f)] public float pickupGoldSfxVolume = 1f;
+
+    [Header("拾取特效（可选）")]
+    [Tooltip("拾取瞬间生成的特效 Prefab（例如 Assets/SO/Particle System.prefab）。留空则不生成。")]
+    public GameObject pickupVfxPrefab;
+    public float pickupVfxOffsetY = 0f;
+    public bool pickupVfxFollowPickupDuringMagnet = true;
 
     [Header("UI（可选）")]
     public TMP_Text carryText;
@@ -117,12 +126,46 @@ public class PlayerGoldCarrier : NetworkBehaviour
 
         LogPickupCmd($"[OnCarryCountChanged] localCarry {oldValue}->{newValue} max={maxCarry}");
 
+        // 只有“增加”才播放拾取反馈（减少是丢弃/投递）
+        if (newValue > oldValue)
+            PlayPickupFeedback(_lastPickupWorldPos);
+
         _bagFillTarget = maxCarry > 0 ? (float)carryCount / maxCarry : 0f;
         _bagFillDisplay = _bagFillTarget;
         RefreshUIAndNotify(); // 让 carryText/bagCapacityText 立刻更新
         UpdateBagFillUI();
         UpdateBagFullFlash();
         UpdateDepositPrompt();
+    }
+
+    void PlayPickupFeedback(Vector2 worldPos)
+    {
+        // 音效：用玩家位置播，避免 3D 衰减导致听不到
+        CombatSfxUtil.Play2D(pickupGoldSfx, transform.position, pickupGoldSfxVolume);
+
+        // 特效：在拾取点生成（如果没配 prefab 就跳过）
+        if (pickupVfxPrefab == null)
+            return;
+
+        Vector3 vfxPos = new Vector3(worldPos.x, worldPos.y, 0f) + new Vector3(0f, pickupVfxOffsetY, 0f);
+        GameObject vfxGo = Instantiate(pickupVfxPrefab, vfxPos, Quaternion.identity);
+
+        ParticleSystem[] pss = vfxGo.GetComponentsInChildren<ParticleSystem>(true);
+        float maxT = 2f;
+        if (pss != null && pss.Length > 0)
+        {
+            foreach (var ps in pss)
+            {
+                if (ps == null) continue;
+                var main = ps.main;
+                float dur = main.duration;
+                float startLife = main.startLifetime.mode == ParticleSystemCurveMode.Constant
+                    ? main.startLifetime.constant
+                    : main.startLifetime.constantMax;
+                maxT = Mathf.Max(maxT, dur + startLife);
+            }
+        }
+        Destroy(vfxGo, maxT + 0.25f);
     }
 
     void Awake()
@@ -349,12 +392,11 @@ public class PlayerGoldCarrier : NetworkBehaviour
 
         bool fullConsume = take >= amount;
 
+        // 记录拾取成功位置，供客户端播放音效/特效
+        _lastPickupWorldPos = pickup.transform.position;
+
         // 记录服务器端判定信息：便于确认为什么“丢出来又立刻被捡回”。
         pickup.CanBePickedDetailed(out bool timeOk2, out bool animOk2, out bool carriedOk2, out float nowTime2, out float spawnTime2, out float readyAt2);
-
-        // 先通知客户端：只有服务器“真正成功”才播放吸取视觉。
-        if (fullConsume || take > 0)
-            TargetPickupApproved(connectionToClient, pickupNetId, take, fullConsume);
 
         if (fullConsume)
             pickup.Consume();
@@ -369,32 +411,8 @@ public class PlayerGoldCarrier : NetworkBehaviour
         LogPickupCmd($"[CmdTryPickup OK] netId={pickupNetId} take={take} carry {before}->{carryCount} max={maxCarry} pickupDelay={pickup.pickupDelay:F2} spawnTime={spawnTime2:F2} now={nowTime2:F2} readyAt={readyAt2:F2} timeOk={timeOk2} animOk={animOk2} carriedOk={carriedOk2}");
     }
 
-    [TargetRpc]
-    void TargetPickupApproved(NetworkConnection target, uint pickupNetId, int take, bool fullConsume)
-    {
-        if (target == null)
-            return;
-
-        // 仅在客户端播放吸取视觉：确保不会出现 server拒绝但 client仍“先吸过去”的错觉。
-        if (!animatePickupMagnet)
-            return;
-
-        if (!NetworkClient.spawned.TryGetValue(pickupNetId, out Mirror.NetworkIdentity ni) || ni == null)
-            return;
-
-        GoldPickup pickup = ni.GetComponent<GoldPickup>();
-        if (pickup == null)
-            return;
-
-        Debug.Log($"[TargetPickupApproved] pickupNetId={pickupNetId} take={take} full={fullConsume} ownerIsLocal={isLocalPlayer}");
-
-        // 防御：如果此时已经被其他系统标记为 carried，则不播放吸取。
-        if (pickup.IsCarriedByEnemy || pickup.IsAttachedToEnemyCarrier)
-            return;
-
-        pickup.BeginPickupAnimation();
-        StartCoroutine(CoMagnetPickupThenApply(pickup, take));
-    }
+    // 之前用 Rpc 来触发音效/特效，但在某些情况下（尤其 host）不稳定。
+    // 现在改为：以 carryCount SyncVar hook 为准，保证只要“真正捡到”就一定播放反馈。
 
     [Command]
     void CmdTryDepositToMine(int requestedCount)
