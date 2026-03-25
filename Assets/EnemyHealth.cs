@@ -1,7 +1,7 @@
-using Mirror;
 using UnityEngine;
+using Mirror;
 
-public class EnemyHealth : MonoBehaviour
+public class EnemyHealth : NetworkBehaviour
 {
     [Header("生命设置")]
     public float maxHealth = 1f;   // 敌人生命值
@@ -28,21 +28,27 @@ public class EnemyHealth : MonoBehaviour
     private EnemyHealthBar enemyHealthBar;
     private bool healthBarInitialized = false;
 
+    [SyncVar(hook = nameof(OnCurrentHealthChanged))]
     private float currentHealth;
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
 
     private void Awake()
     {
-        currentHealth = maxHealth;
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer != null)
         {
             originalColor = spriteRenderer.color;
         }
         
-        // 在 Awake 时就初始化血量条，确保 EnemyHealthBar.Instance 被正确设置
+        // UI 可以在客户端初始化（用于显示）
         InitializeHealthBar();
+    }
+
+    public override void OnStartServer()
+    {
+        base.OnStartServer();
+        currentHealth = maxHealth;
     }
 
     /// <summary>
@@ -142,7 +148,7 @@ public class EnemyHealth : MonoBehaviour
             InitializeHealthBar();
         }
 
-        currentHealth -= damage;
+        currentHealth = Mathf.Max(0f, currentHealth - damage);
         // 确保血量不低于 0
         if (currentHealth < 0)
         {
@@ -165,21 +171,32 @@ public class EnemyHealth : MonoBehaviour
             enemy.ApplyHitReaction(hitSourceWorldPos);
         }
 
-        // 更新血量条 UI（首次受伤时显示）
-        if (enemyHealthBar != null)
-        {
-            Debug.Log($"[EnemyHealth.TakeDamage] 血量条已显示");
-            enemyHealthBar.Show();  // 显示血量条
-            enemyHealthBar.UpdateHealth(currentHealth, maxHealth, this);  // 传递当前敌人
-        }
-        else
-        {
-            Debug.LogError($"[EnemyHealth.TakeDamage] 错误：enemyHealthBar 为 null！");
-        }
+        // UI 更新由 SyncVar hook 在客户端执行（host 也会走 hook）
 
         if (currentHealth <= 0)
         {
             Die();
+        }
+    }
+
+    void OnCurrentHealthChanged(float oldValue, float newValue)
+    {
+        // 客户端显示血条/数值
+        if (!healthBarInitialized)
+            InitializeHealthBar();
+
+        if (enemyHealthBar != null)
+        {
+            enemyHealthBar.Show();
+            enemyHealthBar.UpdateHealth(newValue, maxHealth, this);
+        }
+
+        // 客户端受击闪红（服务器也会触发 hook：host 情况下无害）
+        if (newValue < oldValue && spriteRenderer != null)
+        {
+            spriteRenderer.color = hurtColor;
+            CancelInvoke(nameof(ResetColor));
+            Invoke(nameof(ResetColor), hurtFlashTime);
         }
     }
 

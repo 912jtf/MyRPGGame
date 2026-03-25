@@ -5,7 +5,7 @@ using Mirror;
 /// <summary>
 /// J：L1→L2→重击。中途按键只排队，不提前打断当前段；每段播完（OnAttackEnd）再衔接下一段。
 /// </summary>
-public class PlayerAttack : MonoBehaviour
+public class PlayerAttack : NetworkBehaviour
 {
     [Header("攻击设置")]
     [Tooltip("无 attackarea 或未使用触发器时，用圆形 Overlap 判定的半径")]
@@ -68,6 +68,16 @@ public class PlayerAttack : MonoBehaviour
     private static readonly int HashAttackL2 = Animator.StringToHash("Attack_L2");
 
     private Transform _attackAreaTransform;
+
+    // server-side guard to avoid duplicate OnAttackHit animation events
+    // (e.g. duplicated animation events or state overlap causing CmdAttackHit twice)
+    double _serverLastAttackHitTime;
+    const double ServerAttackHitDedupWindowSeconds = 0.08;
+
+    // 每一段攻击（L1/L2/Heavy）实例编号：根治“同一段命中帧被结算两次”
+    uint _localAttackInstanceId;
+    uint _currentAttackInstanceId;
+    uint _serverLastProcessedAttackInstanceId;
 
     [Header("Net Debug (player remote anim)")]
     public bool debugRemoteAnimLog = true;
@@ -149,8 +159,9 @@ public class PlayerAttack : MonoBehaviour
 
     private bool IsControlledLocally()
     {
-        if (_netIdentity != null && !_netIdentity.isLocalPlayer)
-            return false;
+        // NetworkBehaviour provides isLocalPlayer; keep fallback for non-network test.
+        if (_netIdentity != null)
+            return _netIdentity.isLocalPlayer;
         return true;
     }
 
@@ -222,6 +233,9 @@ public class PlayerAttack : MonoBehaviour
 
         if (Mathf.Clamp(comboStep, 1, 2) == 1)
             PlayLightAttackSfx();
+
+        _localAttackInstanceId++;
+        _currentAttackInstanceId = _localAttackInstanceId;
     }
 
     void PlayLightAttackSfx()
@@ -256,6 +270,16 @@ public class PlayerAttack : MonoBehaviour
     public bool TryApplyHitFromHitbox(Collider2D other)
     {
         if (other == null || hitbox == null || !hitbox.DamageWindowActive)
+            return false;
+
+        // 命中判定与伤害只允许服务器结算，避免 Host 出现双倍伤害
+        if (!NetworkServer.active)
+            return false;
+
+        // 联机模式下统一走“动画命中帧 -> CmdAttackHit -> 服务器圆形判定”这一条路径。
+        // 因此禁用 Hitbox Trigger 的伤害结算，避免与 CmdAttackHit 叠加导致双倍伤害，
+        // 同时保证 host/client 完全一致的伤害来源与判定逻辑。
+        if (NetworkClient.active)
             return false;
 
         if (((1 << other.gameObject.layer) & enemyLayer) == 0)
@@ -302,31 +326,100 @@ public class PlayerAttack : MonoBehaviour
     /// </summary>
     public void OnAttackHit()
     {
-        // 伤害必须由服务器结算，避免 client 因为本地/远端物理状态不同导致命中判定不一致。
+        // 统一伤害来源：本地玩家在命中帧发 Command，服务器权威结算（host/client 一致）。
+        if (NetworkClient.active && isLocalPlayer)
+        {
+            int comboStep = 1;
+            if (animator != null)
+                comboStep = Mathf.Clamp(animator.GetInteger("ComboStep"), 1, 3);
+            bool flipX = spriteRenderer != null && spriteRenderer.flipX;
+            CmdAttackHit((Vector2)transform.position, flipX, _currentAttackIsHeavy, comboStep, _currentAttackInstanceId);
+            return;
+        }
+
+        // 纯服务器（Dedicated）模式下，仍允许服务器端直接结算（若动画事件在服务器侧触发）。
         if (!NetworkServer.active)
             return;
 
-        if (circleDamageOnlyWhenNoHitbox && hitbox != null)
+        ServerApplyAttackHit((Vector2)transform.position, spriteRenderer != null && spriteRenderer.flipX, _currentAttackIsHeavy, animator != null ? animator.GetInteger("ComboStep") : 1);
+    }
+
+    [Command]
+    void CmdAttackHit(Vector2 attackerPos, bool flipX, bool isHeavy, int comboStep, uint attackInstanceId)
+    {
+        // 同一段攻击只允许结算一次（client 发送重复命中帧、或网络延迟导致 dedup window 失效时也能兜住）
+        if (attackInstanceId != 0)
+        {
+            if (attackInstanceId == _serverLastProcessedAttackInstanceId)
+                return;
+            _serverLastProcessedAttackInstanceId = attackInstanceId;
+        }
+
+        // Deduplicate: if animation event fires twice in a tiny window, only apply once.
+        double now = NetworkTime.time;
+        if (_serverLastAttackHitTime > 0 && now - _serverLastAttackHitTime < ServerAttackHitDedupWindowSeconds)
             return;
+        _serverLastAttackHitTime = now;
+
+        ServerApplyAttackHit(attackerPos, flipX, isHeavy, comboStep);
+    }
+
+    void ServerApplyAttackHit(Vector2 attackerPos, bool flipX, bool isHeavy, int comboStep)
+    {
+        if (!NetworkServer.active)
+            return;
+
         if (attackRange <= 0f)
             return;
 
-        Vector2 attackCenter = GetAttackCenter();
-        float dir = (spriteRenderer != null && spriteRenderer.flipX) ? -1f : 1f;
+        // 服务器端使用传入的朝向与位置来做命中判定，避免 client/host 物理差异。
+        float dir = flipX ? -1f : 1f;
+        Vector2 offset = new Vector2(attackOffset.x * dir, attackOffset.y);
+        Vector2 attackCenter = attackerPos + offset;
         Vector2 forward = new Vector2(dir, 0f);
 
+        float dmg = attackDamage;
+        if (isHeavy)
+            dmg *= heavyDamageMultiplier;
+        else
+        {
+            int step = Mathf.Clamp(comboStep, 1, 2);
+            float m = 1f;
+            if (comboDamageMultipliers != null && comboDamageMultipliers.Length > 0)
+            {
+                int idx = Mathf.Clamp(step - 1, 0, comboDamageMultipliers.Length - 1);
+                m = comboDamageMultipliers[idx];
+            }
+            dmg *= m;
+        }
+
         Collider2D[] hitEnemies = Physics2D.OverlapCircleAll(attackCenter, attackRange, enemyLayer);
+        // 重要：同一个敌人可能有多个非 Trigger Collider（例如 body + feet），OverlapCircleAll 会返回多个命中。
+        // 我们需要按 EnemyHealth 去重，避免“轻击偶尔变成 2 点伤害”的现象。
+        System.Collections.Generic.HashSet<int> damaged = null;
         foreach (Collider2D enemyCollider in hitEnemies)
         {
-            if (enemyCollider.isTrigger)
+            if (enemyCollider == null || enemyCollider.isTrigger)
                 continue;
-            Vector2 toEnemy = (Vector2)enemyCollider.transform.position - (Vector2)transform.position;
-            if (Vector2.Dot(toEnemy.normalized, forward) <= 0f)
+
+            Vector2 toEnemy = (Vector2)enemyCollider.transform.position - attackerPos;
+            if (toEnemy.sqrMagnitude > 0.0001f && Vector2.Dot(toEnemy.normalized, forward) <= 0f)
                 continue;
 
             EnemyHealth enemyHealth = enemyCollider.GetComponent<EnemyHealth>();
-            if (enemyHealth != null)
-                enemyHealth.TakeDamage(ComputeDamage(), transform.position);
+            if (enemyHealth == null)
+                enemyHealth = enemyCollider.GetComponentInParent<EnemyHealth>();
+            if (enemyHealth == null)
+                continue;
+
+            int id = enemyHealth.gameObject.GetInstanceID();
+            if (damaged == null)
+                damaged = new System.Collections.Generic.HashSet<int>();
+            if (damaged.Contains(id))
+                continue;
+            damaged.Add(id);
+
+            enemyHealth.TakeDamage(dmg, attackerPos);
         }
     }
 
@@ -363,6 +456,8 @@ public class PlayerAttack : MonoBehaviour
                     hitbox.HitboxEnd();
                     hitbox.SwingStart();
                 }
+                _localAttackInstanceId++;
+                _currentAttackInstanceId = _localAttackInstanceId;
                 return;
             }
 
@@ -383,6 +478,8 @@ public class PlayerAttack : MonoBehaviour
                     hitbox.HitboxEnd();
                     hitbox.SwingStart();
                 }
+                _localAttackInstanceId++;
+                _currentAttackInstanceId = _localAttackInstanceId;
                 return;
             }
         }
