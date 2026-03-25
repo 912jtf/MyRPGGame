@@ -1,4 +1,5 @@
 using UnityEngine;
+using Mirror;
 
 /// <summary>
 /// 开局在场景内生成散落金块，数量为 <see cref="GoldMineController.maxGold"/> 减去
@@ -40,7 +41,7 @@ public class WorldGoldScatterSpawner : MonoBehaviour
 
     void Start()
     {
-        if (spawnOnStart)
+        if (spawnOnStart && NetworkServer.active)
             SpawnWorldGold();
     }
 
@@ -72,9 +73,36 @@ public class WorldGoldScatterSpawner : MonoBehaviour
                 continue;
 
             GameObject go = Instantiate(goldPickupPrefab, pos, Quaternion.identity, parent);
+
+            EnsureNetworkedGoldPickup(go);
+
             GoldPickup gp = go.GetComponent<GoldPickup>();
             if (gp != null)
                 gp.autoDestroyAfter = 0f;
+
+            if (NetworkServer.active)
+                NetworkServer.Spawn(go);
+        }
+    }
+
+    void EnsureNetworkedGoldPickup(GameObject go)
+    {
+        if (go == null)
+            return;
+
+        // 仅当没有 NetworkIdentity 时才动态添加
+        if (go.GetComponent<NetworkIdentity>() == null)
+            go.AddComponent<NetworkIdentity>();
+
+        // 确保位置可同步（否则客户端只会看到预制体默认位置）
+        if (go.GetComponent<NetworkTransformReliable>() == null)
+        {
+            var nt = go.AddComponent<NetworkTransformReliable>();
+            nt.syncPosition = true;
+            nt.syncRotation = true;
+            nt.syncScale = false;
+            nt.interpolatePosition = true;
+            nt.interpolateRotation = true;
         }
     }
 

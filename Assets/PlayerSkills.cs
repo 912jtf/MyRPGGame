@@ -16,6 +16,7 @@ public class PlayerSkills : NetworkBehaviour
     // 给各 SkillSO 在服务器侧使用的“投放/施放快照”
     // 目的是修复：客户端走路时命令到服务器有一帧延迟，导致特效/弹丸从落后位置生成。
     public Vector3 LastCastWorldPosition { get; private set; }
+    public Vector2 LastCastVelocity { get; private set; }
 
     void Awake()
     {
@@ -40,7 +41,15 @@ public class PlayerSkills : NetworkBehaviour
             if (Input.GetKeyDown(skill.key) && IsCooldownReady(skill))
             {
                 // 交给服务器执行（保证火球/治疗/冲刺在两边一致）
-                CmdActivateSkill(i, transform.position);
+                Vector3 castPos = transform.position;
+                Vector2 castVel = Vector2.zero;
+                Rigidbody2D rb = GetComponent<Rigidbody2D>();
+                if (rb != null)
+                    castVel = rb.velocity;
+
+                // 用服务器时间戳做预测：减少“命令延迟导致火球中心落后”的观感
+                double castServerTime = NetworkTime.time;
+                CmdActivateSkill(i, castPos, castVel, castServerTime);
             }
         }
     }
@@ -62,7 +71,7 @@ public class PlayerSkills : NetworkBehaviour
     }
 
     [Command]
-    void CmdActivateSkill(int skillIndex, Vector3 castWorldPos)
+    void CmdActivateSkill(int skillIndex, Vector3 castWorldPos, Vector2 castVelocity, double castServerTime)
     {
         if (skills == null || skillIndex < 0 || skillIndex >= skills.Count)
             return;
@@ -75,8 +84,13 @@ public class PlayerSkills : NetworkBehaviour
         if (!IsCooldownReady(skill))
             return;
 
-        // 保存施放快照，让 SkillSO 在服务器端用“客户端那一刻的位置”
-        LastCastWorldPosition = castWorldPos;
+        // 预测：把“客户端施放那一刻的位置”推进到“服务器执行那一刻”
+        // dt 可能会受网络影响，这里做一个安全夹紧避免异常大 dt
+        double dtDouble = NetworkTime.time - castServerTime;
+        float dt = Mathf.Clamp((float)dtDouble, 0f, 0.5f);
+
+        LastCastVelocity = castVelocity;
+        LastCastWorldPosition = castWorldPos + (Vector3)(castVelocity * dt);
 
         skill.Activate(this);
         StartCooldown(skill);

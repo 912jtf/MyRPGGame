@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using TMPro;
+using Mirror;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -11,11 +12,12 @@ using UnityEngine.UI;
 /// - 进入矿区（GoldMineController 的 Trigger）自动投递；
 /// - 可选按键丢弃 1 金块到脚下。
 /// </summary>
-public class PlayerGoldCarrier : MonoBehaviour
+public class PlayerGoldCarrier : NetworkBehaviour
 {
     [Header("携带设置")]
     [Min(1)] public int maxCarry = 2;
-    [Min(0)] public int carryCount = 0;
+    [Min(0)] [SyncVar(hook = nameof(OnCarryCountChanged))]
+    public int carryCount = 0;
 
     [Header("丢弃设置（可选）")]
     public bool allowDropByKey = true;
@@ -93,13 +95,27 @@ public class PlayerGoldCarrier : MonoBehaviour
     Vector3 _depositPromptBaseScale = Vector3.one;
     Mirror.NetworkIdentity _netIdentity;
 
+    void OnCarryCountChanged(int oldValue, int newValue)
+    {
+        // 仅本地玩家实例更新背包 UI（避免 host/client 之间互相覆盖全局 UI）
+        if (!isLocalPlayer)
+            return;
+
+        _bagFillTarget = maxCarry > 0 ? (float)carryCount / maxCarry : 0f;
+        _bagFillDisplay = _bagFillTarget;
+        UpdateBagFillUI();
+        UpdateBagFullFlash();
+        UpdateDepositPrompt();
+    }
+
     void Awake()
     {
         _spriteRenderer = GetComponent<SpriteRenderer>();
         _pickupTriggerCollider = ResolvePickupTriggerCollider();
         _netIdentity = GetComponent<Mirror.NetworkIdentity>();
         maxCarry = Mathf.Max(1, maxCarry);
-        carryCount = Mathf.Clamp(carryCount, 0, maxCarry);
+        if (isServer)
+            carryCount = Mathf.Clamp(carryCount, 0, maxCarry);
         TryAutoBindUI();
         _bagFillTarget = maxCarry > 0 ? (float)carryCount / maxCarry : 0f;
         _bagFillDisplay = _bagFillTarget;
@@ -117,11 +133,15 @@ public class PlayerGoldCarrier : MonoBehaviour
 
     void Update()
     {
-        if (_netIdentity != null && !_netIdentity.isLocalPlayer)
+        if (!isLocalPlayer)
             return;
 
         if (Input.GetKeyDown(depositKey))
-            TryDepositOneToNearbyMine();
+        {
+            int requested = Mathf.Clamp(depositPerPress, 1, carryCount);
+            if (_nearbyMine != null && requested > 0)
+                CmdTryDepositToMine(requested);
+        }
 
         if (!allowDropByKey || !Input.GetKeyDown(dropKey))
         {
@@ -132,8 +152,8 @@ public class PlayerGoldCarrier : MonoBehaviour
         }
 
         // 明确防呆：没金块时按 F 不应有任何丢弃行为。
-        if (carryCount > 0)
-            TryDropOne();
+        if (carryCount > 0 && allowDropByKey && goldPickupPrefab != null)
+            TryDropOneRequestToServer();
 
         UpdateBagFillUI();
         UpdateBagFullFlash();
@@ -165,6 +185,10 @@ public class PlayerGoldCarrier : MonoBehaviour
 
     bool TryPickup(Collider2D other)
     {
+        // 只让本地玩家发起拾取请求；由服务器进行权威扣除/销毁
+        if (!isLocalPlayer)
+            return false;
+
         if (carryCount >= maxCarry || other == null)
             return false;
 
@@ -180,25 +204,21 @@ public class PlayerGoldCarrier : MonoBehaviour
         if (take <= 0)
             return false;
 
-        // 玩家触碰到的地面金块统一设为常驻，避免倒计时自动消失。
+        // 玩家触碰到的地面金块统一设为常驻，避免倒计时自动消失（视觉/容错用，服务器也会做销毁）
         pickup.autoDestroyAfter = 0f;
+
+        Mirror.NetworkIdentity pickupNi = pickup.GetComponent<Mirror.NetworkIdentity>();
+        if (pickupNi == null)
+            return false;
 
         bool fullConsume = take >= amount;
         if (animatePickupMagnet && fullConsume)
         {
             pickup.BeginPickupAnimation();
-            StartCoroutine(CoMagnetPickupThenApply(pickup, take));
-            return true;
+            StartCoroutine(CoMagnetPickupThenApply(pickup, take)); // 视觉动画：不在客户端扣血/销毁
         }
 
-        carryCount += take;
-        if (take >= amount)
-            pickup.Consume();
-        else
-            pickup.amount = amount - take;
-
-        CombatSfxUtil.Play2D(pickupGoldSfx, transform.position, pickupGoldSfxVolume);
-        RefreshUIAndNotify();
+        CmdTryPickup(pickupNi.netId, take);
         return true;
     }
 
@@ -246,11 +266,128 @@ public class PlayerGoldCarrier : MonoBehaviour
 
         if (pickup == null)
             yield break;
+    }
+
+    [Command]
+    void CmdTryPickup(uint pickupNetId, int desiredTake)
+    {
+        if (pickupNetId == 0)
+            return;
+        if (desiredTake <= 0)
+            return;
+        if (carryCount >= maxCarry)
+            return;
+
+        if (!NetworkServer.spawned.TryGetValue(pickupNetId, out Mirror.NetworkIdentity ni) || ni == null)
+            return;
+
+        GoldPickup pickup = ni.GetComponent<GoldPickup>();
+        if (pickup == null)
+            return;
+
+        if (pickup.IsCarriedByEnemy)
+            return;
+        if (!pickup.CanBePicked)
+            return;
+
+        // 在服务器端也锁定拾取，防止同一帧/多帧重复触发造成多次扣减
+        pickup.BeginPickupAnimation();
+
+        int room = maxCarry - carryCount;
+        int amount = Mathf.Max(1, pickup.amount);
+        int take = Mathf.Min(room, amount, desiredTake);
+        if (take <= 0)
+            return;
+
+        // 玩家拾取后该金块永不自动销毁
+        pickup.autoDestroyAfter = 0f;
+
+        if (take >= amount)
+            pickup.Consume();
+        else
+            pickup.amount = amount - take;
 
         carryCount += take;
-        CombatSfxUtil.Play2D(pickupGoldSfx, transform.position, pickupGoldSfxVolume);
-        pickup.Consume();
-        RefreshUIAndNotify();
+    }
+
+    [Command]
+    void CmdTryDepositToMine(int requestedCount)
+    {
+        if (requestedCount <= 0)
+            return;
+        if (carryCount <= 0)
+            return;
+
+        requestedCount = Mathf.Min(requestedCount, carryCount);
+        if (requestedCount <= 0)
+            return;
+
+        GoldMineController mine = FindObjectOfType<GoldMineController>();
+        if (mine == null)
+            return;
+
+        int deposited = mine.DepositFromPlayer(requestedCount);
+        if (deposited <= 0)
+            return;
+
+        carryCount = Mathf.Max(0, carryCount - deposited);
+    }
+
+    void TryDropOneRequestToServer()
+    {
+        // 兜底：若未在 Inspector 配置，尝试从场景中找一个 GoldPickup 作为运行时模板。
+        EnsureDropPrefabBound();
+        if (goldPickupPrefab == null)
+            return;
+
+        Vector2 spawnPos = (Vector2)transform.position + GetForwardDir() * Mathf.Max(0f, dropForwardDistance);
+        if (dropScatterRadius > 0f)
+            spawnPos += UnityEngine.Random.insideUnitCircle * dropScatterRadius;
+
+        CmdTryDropGold(spawnPos);
+    }
+
+    [Command]
+    void CmdTryDropGold(Vector2 spawnPos)
+    {
+        if (carryCount <= 0)
+            return;
+
+        // 确保掉落模板在 server 端可用
+        EnsureDropPrefabBound();
+        if (goldPickupPrefab == null)
+            return;
+
+        // 服务器生成并网络同步
+        GameObject go = Instantiate(goldPickupPrefab, spawnPos, Quaternion.identity);
+        GoldPickup pickup = go.GetComponent<GoldPickup>();
+        if (pickup != null)
+        {
+            pickup.amount = 1;
+            pickup.autoDestroyAfter = 0f;
+        }
+
+        EnsureNetworkedGoldPickup(go);
+        NetworkServer.Spawn(go);
+
+        carryCount = Mathf.Max(0, carryCount - 1);
+    }
+
+    void EnsureNetworkedGoldPickup(GameObject go)
+    {
+        if (go == null)
+            return;
+
+        if (go.GetComponent<Mirror.NetworkIdentity>() == null)
+            go.AddComponent<Mirror.NetworkIdentity>();
+
+        if (go.GetComponent<NetworkTransformReliable>() == null)
+        {
+            var nt = go.AddComponent<NetworkTransformReliable>();
+            nt.syncPosition = true;
+            nt.syncRotation = true;
+            nt.syncScale = false;
+        }
     }
 
     bool TryDepositOneToNearbyMine()

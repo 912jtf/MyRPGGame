@@ -1521,6 +1521,9 @@ public class Enemy : MonoBehaviour
 
     void SpawnStolenGoldPickup()
     {
+        if (!NetworkServer.active)
+            return;
+
         Vector2 offset = UnityEngine.Random.insideUnitCircle * Mathf.Max(0f, stolenGoldDropScatter);
         Vector2 spawnPos = (Vector2)transform.position + offset;
 
@@ -1538,6 +1541,9 @@ public class Enemy : MonoBehaviour
             pickup = go.AddComponent<GoldPickup>();
         pickup.amount = Mathf.Max(1, pickup.amount);
         EnsurePickupTrigger(go);
+
+        EnsureNetworkedGoldPickup(go);
+        NetworkServer.Spawn(go);
 
         if (debugMineAI)
         {
@@ -1586,6 +1592,25 @@ public class Enemy : MonoBehaviour
         {
             Collider2D anyCol = pickupObj.GetComponent<Collider2D>();
             Debug.Log($"[{name}] EnsurePickupTrigger on {pickupObj.name}: colTrigger={(anyCol != null ? anyCol.isTrigger : false)}, rb2d={(rb2d != null)}");
+        }
+    }
+
+    void EnsureNetworkedGoldPickup(GameObject go)
+    {
+        if (go == null)
+            return;
+
+        if (go.GetComponent<NetworkIdentity>() == null)
+            go.AddComponent<NetworkIdentity>();
+
+        if (go.GetComponent<NetworkTransformReliable>() == null)
+        {
+            var nt = go.AddComponent<NetworkTransformReliable>();
+            nt.syncPosition = true;
+            nt.syncRotation = true;
+            nt.syncScale = false;
+            nt.interpolatePosition = true;
+            nt.interpolateRotation = true;
         }
     }
 
@@ -1658,6 +1683,9 @@ public class Enemy : MonoBehaviour
 
     void GiveCarriedGoldPickup(int amount)
     {
+        if (!NetworkServer.active)
+            return;
+
         amount = Mathf.Max(1, amount);
 
         // 已有携带金块：只累加数量即可（避免叠多份 GameObject）。
@@ -1695,6 +1723,9 @@ public class Enemy : MonoBehaviour
         go.transform.localPosition = carriedGoldLocalOffset;
         go.transform.localRotation = Quaternion.identity;
         SyncCarriedGoldRenderOrder(go);
+
+        EnsureNetworkedGoldPickup(go);
+        NetworkServer.Spawn(go);
 
         _carriedGoldPickup = pickup;
 

@@ -1,3 +1,4 @@
+using Mirror;
 using UnityEngine;
 
 public class EnemyHealth : MonoBehaviour
@@ -129,6 +130,10 @@ public class EnemyHealth : MonoBehaviour
 
     public void TakeDamage(float damage, Vector2 hitSourceWorldPos)
     {
+        // 敌人生命/死亡必须由服务器结算，避免客户端“击杀成功但对象不消失”的不同步
+        if (!NetworkServer.active)
+            return;
+
         Debug.Log($"[EnemyHealth.TakeDamage] 敌人 {gameObject.name} 受到伤害 {damage}，当前血量 {currentHealth} → {currentHealth - damage}");
         
         // 首次受伤时初始化血量条（确保所有物体都已初始化）
@@ -200,6 +205,9 @@ public class EnemyHealth : MonoBehaviour
         }
 
         // 这里可以改成播放死亡动画、掉落等
-        Destroy(gameObject);
+        if (NetworkServer.active && GetComponent<NetworkIdentity>() != null)
+            NetworkServer.Destroy(gameObject);
+        else
+            Destroy(gameObject);
     }
 }

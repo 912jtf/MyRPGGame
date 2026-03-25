@@ -29,9 +29,9 @@ public class FireSkillSO : SkillSO
 
         Vector3 castPos = owner.LastCastWorldPosition;
         Vector3 serverOwnerPos = centerTransform.position;
-        // “客户端施放那一刻的位置” - “服务器那一刻的玩家位置”
-        // 用这个 offset 修正轨道中心，消除视觉上一帧延迟
-        Vector3 centerOffset = castPos - serverOwnerPos;
+        // Reliable 快照的时间差会让 centerOffset 出现“沿移动方向偏移”的错觉。
+        // 现在把轨道中心“强绑定到角色本体”，由 Fire.cs 客户端本地公式来跟随角色中心。
+        Vector3 centerOffset = Vector3.zero;
 
         if (fireCount <= 0) fireCount = 3;
 
@@ -42,19 +42,17 @@ public class FireSkillSO : SkillSO
         for (int i = 0; i < fireCount; i++)
         {
             float startAngle = i * deltaAngle;
-            Vector3 spawnCenterPos = serverOwnerPos + centerOffset;
+            Vector3 spawnCenterPos = serverOwnerPos;
             GameObject fireObj = Object.Instantiate(firePrefab, spawnCenterPos, Quaternion.identity);
-            if (NetworkServer.active)
-            {
-                // 需要你给 Fire.prefab 添加 NetworkIdentity（并建议加 NetworkTransform）。
-                if (fireObj != null)
-                    NetworkServer.Spawn(fireObj);
-            }
             Fire fire = fireObj.GetComponent<Fire>();
             if (fire != null)
             {
+                // 必须在 Spawn 之前调用，确保 SyncVar 初始值能随首包同步到客户端
                 fire.Init(centerTransform, startAngle, radius, rotateSpeed, duration, damage, centerOffset);
             }
+
+            if (NetworkServer.active && fireObj != null)
+                NetworkServer.Spawn(fireObj);
         }
     }
 }

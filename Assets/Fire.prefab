@@ -192,12 +192,12 @@ MonoBehaviour:
   syncInterval: 0
   target: {fileID: 5396812028244655069}
   updateMethod: 1
-  syncPosition: 1
-  syncRotation: 1
+  syncPosition: 0
+  syncRotation: 0
   syncScale: 0
   onlySyncOnChange: 0
   compressRotation: 1
-  interpolatePosition: 1
+  interpolatePosition: 0
   interpolateRotation: 1
   interpolateScale: 1
   coordinateSpace: 1
