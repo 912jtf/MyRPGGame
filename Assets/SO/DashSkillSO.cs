@@ -1,3 +1,4 @@
+using Mirror;
 using UnityEngine;
 
 [CreateAssetMenu(fileName = "DashSkill_", menuName = "SO/Skill/Dash")]
@@ -25,6 +26,9 @@ public class DashSkillSO : SkillSO
     public override void Activate(PlayerSkills owner)
     {
         if (owner == null) return;
+        // Dash 由服务器执行，保证位置/碰撞结果两边一致
+        if (!NetworkServer.active)
+            return;
 
         Transform t = owner.transform;
         if (t == null) return;

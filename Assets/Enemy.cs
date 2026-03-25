@@ -1,3 +1,4 @@
+using Mirror;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -192,6 +193,25 @@ public class Enemy : MonoBehaviour
     State _lastDebugState;
     float _nextDebugLogTime;
 
+    [Header("Net Debug (enemy client motion)")]
+    public bool debugClientEnemyMotionLog = true;
+    public float clientEnemyMotionFrameJumpThreshold = 0.25f;
+    public float clientEnemyMotionFrameLogCooldownSeconds = 0.5f;
+    public float clientEnemyMotionLogDurationSeconds = 15f;
+    private float _clientEnemyMotionLogUntilTime;
+    private float _clientEnemyMotionFrameNextLogTime;
+    private Vector2 _clientEnemyMotionPrevFramePos;
+    private bool _clientEnemyMotionPrevFramePosInit;
+
+    // 客户端朝向：优先用“本帧位移方向”，在攻击/静止时再用“最近玩家方向”
+    private Vector3 _clientFacingPrevPos;
+    private bool _clientFacingPrevPosInit;
+
+    // 客户端朝向：避免每个怪物每帧都调用 FindGameObjectsWithTag（怪物多时会直接卡死/掉帧）
+    static Transform[] s_cachedClientPlayers;
+    static float s_cachedClientPlayersUntil;
+    public float clientFacingPlayerCacheInterval = 0.25f;
+
     GoldPickup _carriedGoldPickup; // 由野怪携带的金块（挂在敌人身上）
     Vector2 _roamDir = Vector2.zero;
     float _nextRoamDirChangeTime;
@@ -231,10 +251,56 @@ public class Enemy : MonoBehaviour
         SetAnimState(idle: true, walk: false, attack: false);
         SetSkillCharging(false);
         ResolveMineTarget();
+
+        _clientEnemyMotionLogUntilTime = Time.time + clientEnemyMotionLogDurationSeconds;
+        _clientEnemyMotionFrameNextLogTime = 0f;
+        _clientEnemyMotionPrevFramePos = transform.position;
+        _clientEnemyMotionPrevFramePosInit = false;
+        _clientFacingPrevPos = transform.position;
+        _clientFacingPrevPosInit = false;
+    }
+
+    void OnEnable()
+    {
+        ApplyNetRolePhysicsEveryFrame();
+    }
+
+    void Start()
+    {
+        ApplyNetRolePhysicsEveryFrame();
+    }
+
+    void ApplyNetRolePhysicsEveryFrame()
+    {
+        if (rb == null)
+            return;
+
+        // 客户端不要做“物理模拟响应”，但要保留碰撞体参与 Physics2D 查询。
+        // 因此改为：客户端 -> Kinematic（仍参与查询/碰撞），服务器 -> Dynamic。
+        if (!rb.simulated)
+            rb.simulated = true;
+
+        bool isServer = NetworkServer.active;
+
+#if UNITY_6000_0_OR_NEWER
+        rb.bodyType = isServer ? RigidbodyType2D.Dynamic : RigidbodyType2D.Kinematic;
+#else
+        rb.isKinematic = !isServer;
+#endif
+
+        if (!isServer)
+        {
+            rb.velocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
     }
 
     void LateUpdate()
     {
+        // only server drives physics / position; clients just display replicated transforms
+        if (!NetworkServer.active)
+            return;
+
         if (!clampCarriedGoldToMap || !fleeAfterSteal || !HasCarriedGold)
             return;
 
@@ -265,6 +331,48 @@ public class Enemy : MonoBehaviour
 
     void Update()
     {
+        ApplyNetRolePhysicsEveryFrame();
+
+        // 连机一致性：敌人 AI / 移动 / 攻击只由服务器驱动
+        if (!NetworkServer.active)
+        {
+            // 客户端只做“朝向/翻面”这类纯视觉修正；
+            // 不要在这里驱动 AI 状态机，避免和服务器不一致。
+            UpdateClientFacing();
+
+            // Client side: only display replicated transform + animator.
+            // Log only for enemy3 and only on sudden jumps, to avoid spam.
+            if (debugClientEnemyMotionLog &&
+                Time.time <= _clientEnemyMotionLogUntilTime &&
+                name.Contains("enemy3"))
+            {
+                Vector2 cur = rb != null ? rb.position : (Vector2)transform.position;
+                if (_clientEnemyMotionPrevFramePosInit)
+                {
+                    float deltaFrame = Vector2.Distance(cur, _clientEnemyMotionPrevFramePos);
+                    if (deltaFrame >= clientEnemyMotionFrameJumpThreshold && Time.time >= _clientEnemyMotionFrameNextLogTime)
+                    {
+                        _clientEnemyMotionFrameNextLogTime = Time.time + clientEnemyMotionFrameLogCooldownSeconds;
+
+                    bool hasIdle = animator != null && HasAnimatorBool(animator, idleBoolName);
+                    bool hasWalk = animator != null && HasAnimatorBool(animator, walkBoolName);
+                    bool hasAttack = animator != null && HasAnimatorBool(animator, attackBoolName);
+
+                    bool idleVal = hasIdle && animator.GetBool(idleBoolName);
+                    bool walkVal = hasWalk && animator.GetBool(walkBoolName);
+                    bool attackVal = hasAttack && animator.GetBool(attackBoolName);
+
+                        Debug.Log($"[NetJitter] ClientEnemy3 frameJump={deltaFrame:F3} rb.simulated={(rb != null ? rb.simulated : false)} pos={cur} animIdle={idleVal} animWalk={walkVal} animAttack={attackVal} t={Time.time:F2}");
+                    }
+                }
+
+                _clientEnemyMotionPrevFramePos = cur;
+                _clientEnemyMotionPrevFramePosInit = true;
+            }
+
+            return;
+        }
+
         UpdateTargetSelection();
 
         if (HandleHitStunAndKnockback())
@@ -294,6 +402,75 @@ public class Enemy : MonoBehaviour
                 UpdateRoam();
                 break;
         }
+    }
+
+    void UpdateClientFacing()
+    {
+        if (spriteRenderer == null)
+            return;
+
+        // 先用移动方向翻面：满足“走向什么地方，就往哪里转”
+        Vector3 curPos = transform.position;
+        if (_clientFacingPrevPosInit)
+        {
+            Vector3 delta = curPos - _clientFacingPrevPos;
+            if (delta.sqrMagnitude > 0.0001f)
+            {
+                bool newFlipMove = (delta.x < 0f) ^ invertFacing;
+                if (spriteRenderer.flipX != newFlipMove)
+                    spriteRenderer.flipX = newFlipMove;
+
+                _clientFacingPrevPos = curPos;
+                _clientFacingPrevPosInit = true;
+                return;
+            }
+        }
+
+        // enemy 在客户端不接触寻路/Trigger（rb.simulated=false），因此 targetPlayer 很可能为 null。
+        // 这里根据“最近玩家”的相对位置来决定 flipX，从而保证：
+        // - 追击时朝向正确
+        // - 攻击时也能在视觉上对准目标
+        if (Time.time >= s_cachedClientPlayersUntil || s_cachedClientPlayers == null || s_cachedClientPlayers.Length == 0)
+        {
+            GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
+            if (players == null || players.Length == 0)
+                s_cachedClientPlayers = new Transform[0];
+            else
+            {
+                s_cachedClientPlayers = new Transform[players.Length];
+                for (int i = 0; i < players.Length; i++)
+                    s_cachedClientPlayers[i] = players[i] != null ? players[i].transform : null;
+            }
+
+            s_cachedClientPlayersUntil = Time.time + Mathf.Max(0.05f, clientFacingPlayerCacheInterval);
+        }
+
+        Vector3 myPos = transform.position;
+        float bestSqr = float.PositiveInfinity;
+        Vector3 bestPos = myPos;
+
+        for (int i = 0; i < s_cachedClientPlayers.Length; i++)
+        {
+            var tr = s_cachedClientPlayers[i];
+            if (tr == null) continue;
+            float d = (tr.position - myPos).sqrMagnitude;
+            if (d < bestSqr)
+            {
+                bestSqr = d;
+                bestPos = tr.position;
+            }
+        }
+
+        Vector3 dir = bestPos - myPos;
+        if (dir.sqrMagnitude < 0.0001f)
+            return;
+
+        bool newFlip = (dir.x < 0f) ^ invertFacing;
+        if (spriteRenderer.flipX != newFlip)
+            spriteRenderer.flipX = newFlip;
+
+        _clientFacingPrevPos = curPos;
+        _clientFacingPrevPosInit = true;
     }
 
     bool HandleHitStunAndKnockback()
@@ -861,6 +1038,10 @@ public class Enemy : MonoBehaviour
     /// </summary>
     public void OnAttackHit()
     {
+        // 只在服务器结算伤害，避免两边重复/不一致
+        if (!NetworkServer.active)
+            return;
+
         if (currentAttackTarget == AttackTargetType.Mine)
         {
             TryMineStealHit();

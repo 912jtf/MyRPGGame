@@ -16,6 +16,9 @@ GameObject:
   - component: {fileID: 3455868610740130744}
   - component: {fileID: 1430818200472594693}
   - component: {fileID: 1374513917554396073}
+  - component: {fileID: 5991010075046893129}
+  - component: {fileID: 9000000000000000003}
+  - component: {fileID: -2233229362526652638}
   m_Layer: 6
   m_Name: enemy3
   m_TagString: Untagged
@@ -253,9 +256,9 @@ MonoBehaviour:
   spawnGoldPickupOnSteal: 0
   fleeMinDistanceFromMine: 2
   fleeMaxDuration: 15
-  debugMineAI: 1
+  debugMineAI: 0
   debugLogInterval: 0.5
-  debugSelectDepletedMineOnSwitch: 1
+  debugSelectDepletedMineOnSwitch: 0
   playerLayer:
     serializedVersion: 2
     m_Bits: 128
@@ -264,11 +267,11 @@ MonoBehaviour:
   skillCastSfx: {fileID: 0}
   meleeAttackSfxVolume: 1
   skillCastSfxVolume: 1
-  debugPathBlocked: 1
+  debugPathBlocked: 0
   debugPathBlockedLogInterval: 0.5
-  debugFleeBlockSummary: 1
+  debugFleeBlockSummary: 0
   debugFleeBlockSummaryLogInterval: 1
-  debugRoamBlockHit: 1
+  debugRoamBlockHit: 0
   debugRoamBlockHitLogInterval: 0.2
   idleBoolName: IsIdle
   walkBoolName: IsWalking
@@ -307,3 +310,74 @@ MonoBehaviour:
   hurtSfxVolume: 1
   enemyIcon: {fileID: -1860057227, guid: 350d4254a498f1c4eb3548401b17acdb, type: 3}
   enemyIconSizeMultiplier: 3
+--- !u!114 &5991010075046893129
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 949960694997253339}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b91ecbcc199f4492b9a91e820070131, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sceneId: 0
+  _assetId: 1314411503
+  serverOnly: 0
+  visibility: 0
+  hasSpawned: 0
+--- !u!114 &-2233229362526652638
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 949960694997253339}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ff3ba0becae47b8b9381191598957c8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncMethod: 1
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  target: {fileID: 4883558283590771682}
+  updateMethod: 1
+  syncPosition: 1
+  syncRotation: 1
+  syncScale: 0
+  onlySyncOnChange: 0
+  compressRotation: 1
+  interpolatePosition: 1
+  interpolateRotation: 1
+  interpolateScale: 1
+  coordinateSpace: 1
+  timelineOffset: 1
+  showGizmos: 0
+  showOverlay: 0
+  overlayColor: {r: 0, g: 0, b: 0, a: 0.5}
+  onlySyncOnChangeCorrectionMultiplier: 2
+  rotationSensitivity: 0.01
+  positionPrecision: 0.001
+  rotationPrecision: 0.001
+  scalePrecision: 0.01
+  debugDraw: 0
+--- !u!114 &9000000000000000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 949960694997253339}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f6f3bf89aa97405989c802ba270f815, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  clientAuthority: 0
+  animator: {fileID: 4836219675935688857}

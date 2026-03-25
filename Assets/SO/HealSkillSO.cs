@@ -1,3 +1,4 @@
+using Mirror;
 using UnityEngine;
 
 [CreateAssetMenu(fileName = "HealSkill_", menuName = "SO/Skill/Heal")]
@@ -16,9 +17,14 @@ public class HealSkillSO : SkillSO
 
     public override void Activate(PlayerSkills owner)
     {
+        // 技能由 PlayerSkills.CmdActivateSkill 在服务器触发
+        if (!NetworkServer.active)
+            return;
+
         if (owner == null) return;
 
-        CombatSfxUtil.Play2D(castSfx, owner.transform.position, castSfxVolume);
+        Vector3 castPos = owner.LastCastWorldPosition;
+        CombatSfxUtil.Play2D(castSfx, castPos, castSfxVolume);
 
         PlayerHealth playerHealth = owner.GetComponent<PlayerHealth>();
         if (playerHealth != null && healAmount > 0)
@@ -28,8 +34,10 @@ public class HealSkillSO : SkillSO
 
         if (healEffectPrefab != null)
         {
-            Vector3 spawnPos = owner.transform.position + effectOffset;
-            Object.Instantiate(healEffectPrefab, spawnPos, Quaternion.identity);
+            Vector3 spawnPos = owner.LastCastWorldPosition + effectOffset;
+            GameObject eff = Object.Instantiate(healEffectPrefab, spawnPos, Quaternion.identity);
+            if (eff != null)
+                NetworkServer.Spawn(eff);
         }
     }
 }

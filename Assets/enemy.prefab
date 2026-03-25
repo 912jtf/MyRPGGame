@@ -16,6 +16,9 @@ GameObject:
   - component: {fileID: 6174181347969796237}
   - component: {fileID: 5391127406665916948}
   - component: {fileID: 3493199409020920248}
+  - component: {fileID: 4802629560048896566}
+  - component: {fileID: 9000000000000000001}
+  - component: {fileID: -8691548816610930544}
   m_Layer: 6
   m_Name: enemy
   m_TagString: Untagged
@@ -253,7 +256,7 @@ MonoBehaviour:
   spawnGoldPickupOnSteal: 0
   fleeMinDistanceFromMine: 2
   fleeMaxDuration: 15
-  debugMineAI: 1
+  debugMineAI: 0
   debugLogInterval: 0.5
   debugSelectDepletedMineOnSwitch: 1
   playerLayer:
@@ -264,11 +267,11 @@ MonoBehaviour:
   skillCastSfx: {fileID: 0}
   meleeAttackSfxVolume: 1
   skillCastSfxVolume: 1
-  debugPathBlocked: 1
+  debugPathBlocked: 0
   debugPathBlockedLogInterval: 0.5
-  debugFleeBlockSummary: 1
+  debugFleeBlockSummary: 0
   debugFleeBlockSummaryLogInterval: 1
-  debugRoamBlockHit: 1
+  debugRoamBlockHit: 0
   debugRoamBlockHitLogInterval: 0.2
   idleBoolName: IsIdle
   walkBoolName: IsWalking
@@ -307,3 +310,74 @@ MonoBehaviour:
   hurtSfxVolume: 1
   enemyIcon: {fileID: -2136839404, guid: bc372fdc8e6abf24f84d881459cfec70, type: 3}
   enemyIconSizeMultiplier: 0.55
+--- !u!114 &4802629560048896566
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5372239900540787393}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b91ecbcc199f4492b9a91e820070131, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sceneId: 0
+  _assetId: 1977544005
+  serverOnly: 0
+  visibility: 0
+  hasSpawned: 0
+--- !u!114 &-8691548816610930544
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5372239900540787393}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ff3ba0becae47b8b9381191598957c8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncMethod: 1
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  target: {fileID: 6055383475828512422}
+  updateMethod: 1
+  syncPosition: 1
+  syncRotation: 1
+  syncScale: 0
+  onlySyncOnChange: 0
+  compressRotation: 1
+  interpolatePosition: 1
+  interpolateRotation: 1
+  interpolateScale: 1
+  coordinateSpace: 1
+  timelineOffset: 1
+  showGizmos: 0
+  showOverlay: 0
+  overlayColor: {r: 0, g: 0, b: 0, a: 0.5}
+  onlySyncOnChangeCorrectionMultiplier: 2
+  rotationSensitivity: 0.01
+  positionPrecision: 0.001
+  rotationPrecision: 0.001
+  scalePrecision: 0.01
+  debugDraw: 0
+--- !u!114 &9000000000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5372239900540787393}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f6f3bf89aa97405989c802ba270f815, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  clientAuthority: 0
+  animator: {fileID: 3482424604786646128}

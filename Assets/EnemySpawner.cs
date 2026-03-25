@@ -1,3 +1,4 @@
+using Mirror;
 using UnityEngine;
 
 /// <summary>
@@ -78,6 +79,9 @@ public class EnemySpawner : MonoBehaviour
 
     private void Update()
     {
+        if (!NetworkServer.active)
+            return;
+
         if (enemyPrefabs == null || enemyPrefabs.Length == 0) return;
         if (goldMine == null)
             goldMine = FindObjectOfType<GoldMineController>();
@@ -140,6 +144,8 @@ public class EnemySpawner : MonoBehaviour
             if (!blockedByObstacle && !blockedByEnemy)
             {
                 GameObject go = Instantiate(selectedPrefab, finalPos, Quaternion.identity);
+                // 需要 enemy*.prefab 上有 NetworkIdentity
+                NetworkServer.Spawn(go);
                 BindMineForSpawnedEnemy(go);
                 return;
             }

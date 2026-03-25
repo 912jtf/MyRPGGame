@@ -14,10 +14,11 @@ GameObject:
   - component: {fileID: 1884046964929601680}
   - component: {fileID: 8999087584811727653}
   - component: {fileID: 1879685869537628964}
+  - component: {fileID: 1111111111111111111}
   - component: {fileID: 4245177302237507496}
   - component: {fileID: 83389432439665805}
   - component: {fileID: 3046166808100115955}
-  - component: {fileID: -2671608762148338982}
+  - component: {fileID: 4864039042938733846}
   - component: {fileID: -2825767138046934080}
   - component: {fileID: -8837610665301174244}
   - component: {fileID: -35595328226742533}
@@ -198,6 +199,23 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &1111111111111111111
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7989021357002233796}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f6f3bf89aa97405989c802ba270f815, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncDirection: 1
+  syncMode: 0
+  syncInterval: 0
+  clientAuthority: 0
+  animator: {fileID: 1879685869537628964}
 --- !u!114 &4245177302237507496
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -296,7 +314,7 @@ MonoBehaviour:
   serverOnly: 0
   visibility: 0
   hasSpawned: 0
---- !u!114 &-2671608762148338982
+--- !u!114 &4864039042938733846
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -308,29 +326,31 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8ff3ba0becae47b8b9381191598957c8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  syncMethod: 0
-  syncDirection: 0
+  syncMethod: 1
+  syncDirection: 1
   syncMode: 0
   syncInterval: 0
   target: {fileID: 7461090099043313206}
-  updateMethod: 0
+  updateMethod: 1
   syncPosition: 1
   syncRotation: 1
   syncScale: 0
-  onlySyncOnChange: 1
+  onlySyncOnChange: 0
   compressRotation: 1
   interpolatePosition: 1
   interpolateRotation: 1
   interpolateScale: 1
-  coordinateSpace: 0
+  coordinateSpace: 1
   timelineOffset: 1
   showGizmos: 0
   showOverlay: 0
   overlayColor: {r: 0, g: 0, b: 0, a: 0.5}
   onlySyncOnChangeCorrectionMultiplier: 2
   rotationSensitivity: 0.01
-  positionPrecision: 0.01
+  positionPrecision: 0.001
+  rotationPrecision: 0.001
   scalePrecision: 0.01
+  debugDraw: 0
 --- !u!114 &-2825767138046934080
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -343,6 +363,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 717301b5066dd7e478f81686f7a9e860, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  syncMethod: 0
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
   skills:
   - {fileID: 11400000, guid: bb6bf953c6d3f30488c13297b21b005e, type: 2}
   - {fileID: 11400000, guid: f594ce7ef1cb45242985d799a0f3cc6e, type: 2}

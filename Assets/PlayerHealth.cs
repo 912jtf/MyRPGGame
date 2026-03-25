@@ -7,8 +7,17 @@ using UnityEngine.SceneManagement;
 using TMPro;
 using System.Collections;
 
-public class PlayerHealth : MonoBehaviour
+public class PlayerHealth : NetworkBehaviour
 {
+    // 只允许一个服务端实例负责“倒计时/胜负判断”（避免每个玩家都在倒计时导致不同步）
+    static PlayerHealth s_serverMatchController;
+    static bool s_serverMatchEndedGuard;
+
+    // 缓存玩家列表，避免服务器每帧 FindObjectsOfType 卡死
+    static PlayerHealth[] s_cachedPlayers;
+    static float s_cachedPlayersUntil;
+    static float s_cachedPlayersRefreshInterval = 1f;
+
     [Header("生命设置")]
     public float maxHealth = 3f;
 
@@ -87,13 +96,18 @@ public class PlayerHealth : MonoBehaviour
     public bool IsDead => _isDead;
     public event Action Died;
 
+    [SyncVar(hook = nameof(OnCurrentHealthNetChanged))]
     private float currentHealth;
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
     private bool _isDead;
     GameObject _gameOverOverlay;
+    [SyncVar(hook = nameof(OnMatchEndedNetChanged))]
     bool _matchEnded;
+    [SyncVar]
     float _matchRemainingTime;
+    [SyncVar]
+    bool _matchIsSuccess;
     TextMeshProUGUI _resultTitleText;
     Vector3 _resultTitleBaseScale;
     Coroutine _titlePulseRoutine;
@@ -110,68 +124,145 @@ public class PlayerHealth : MonoBehaviour
         if (deadSprite == null && !string.IsNullOrWhiteSpace(deadSpriteName))
             deadSprite = TryFindSpriteByName(deadSpriteName);
 
-        // 如果在 Prefab 上没法手动拖引用，尝试在场景中自动寻找血条 Image
+        // 自动绑定：优先绑定到“自己身上”的 UI，避免 host/client 两个玩家互相改同一份 UI
         if (healthFillImage == null)
         {
-            // 直接通过名字查找 "HealthBar"（敌人的叫 "EnemyHealthBar"，所以不会冲突）
-            GameObject bar = GameObject.Find("HealthBar");
+            Transform barTr = transform.Find("HealthBar");
+            if (barTr != null)
+                healthFillImage = barTr.GetComponent<Image>();
 
-            if (bar != null)
+            if (healthFillImage == null)
             {
-                healthFillImage = bar.GetComponent<Image>();
+                Image[] imgs = GetComponentsInChildren<Image>(true);
+                for (int i = 0; i < imgs.Length; i++)
+                {
+                    if (imgs[i] != null && imgs[i].name == "HealthBar")
+                    {
+                        healthFillImage = imgs[i];
+                        break;
+                    }
+                }
+            }
+
+            // 最后兜底：退回到全局查找（尽量避免）
+            if (healthFillImage == null)
+            {
+                GameObject bar = GameObject.Find("HealthBar");
+                if (bar != null)
+                    healthFillImage = bar.GetComponent<Image>();
             }
         }
 
-        // 自动查找血量文字（如果没有手动赋值）
-        // 必须改名为 "PlayerHealthText" 避免和敌人血量条冲突
         if (healthText == null)
         {
-            GameObject textObj = GameObject.Find("PlayerHealthText");
-            if (textObj != null)
+            Transform textTr = transform.Find("PlayerHealthText");
+            if (textTr != null)
+                healthText = textTr.GetComponent<TMPro.TMP_Text>();
+
+            if (healthText == null)
             {
-                healthText = textObj.GetComponent<TMPro.TMP_Text>();
+                TMPro.TMP_Text[] texts = GetComponentsInChildren<TMPro.TMP_Text>(true);
+                for (int i = 0; i < texts.Length; i++)
+                {
+                    if (texts[i] != null && texts[i].name == "PlayerHealthText")
+                    {
+                        healthText = texts[i];
+                        break;
+                    }
+                }
+            }
+
+            if (healthText == null)
+            {
+                GameObject textObj = GameObject.Find("PlayerHealthText");
+                if (textObj != null)
+                    healthText = textObj.GetComponent<TMPro.TMP_Text>();
             }
         }
 
         UpdateHealthUI();
-        _matchRemainingTime = Mathf.Max(1f, matchDurationSeconds);
-        if (goldMineController == null)
-            goldMineController = FindObjectOfType<GoldMineController>();
-        if (goldMineController != null)
-            goldMineController.GoldChanged += OnMineGoldChanged;
+    }
 
-        if (showCountdownText)
+    private void OnDestroy()
+    {
+        if (isServer && goldMineController != null)
+            goldMineController.GoldChanged -= OnMineGoldChanged;
+    }
+
+    public override void OnStartServer()
+    {
+        base.OnStartServer();
+        _matchRemainingTime = Mathf.Max(1f, matchDurationSeconds);
+        _matchEnded = false;
+        _matchIsSuccess = false;
+
+        // 只让第一个进入 OnStartServer 的玩家对象作为“服务端倒计时控制器”
+        if (s_serverMatchController == null)
+            s_serverMatchController = this;
+
+        if (this == s_serverMatchController)
+        {
+            s_serverMatchEndedGuard = false;
+
+            if (goldMineController == null)
+                goldMineController = FindObjectOfType<GoldMineController>();
+
+            if (goldMineController != null)
+            {
+                goldMineController.GoldChanged += OnMineGoldChanged;
+                // 初始同步一次金量，保证客户端 UI 与 host 一致
+                RpcSyncMineGold(goldMineController.CurrentGold, goldMineController.maxGold);
+            }
+        }
+    }
+
+    public override void OnStartClient()
+    {
+        base.OnStartClient();
+
+        if (showCountdownText && isLocalPlayer)
         {
             EnsureCountdownText();
             RefreshCountdownText();
         }
     }
 
-    private void OnDestroy()
-    {
-        if (goldMineController != null)
-            goldMineController.GoldChanged -= OnMineGoldChanged;
-    }
-
     private void Update()
     {
-        if (_matchEnded || _isDead)
+        if (_matchEnded)
             return;
 
-        _matchRemainingTime -= Time.deltaTime;
-        if (showCountdownText)
-            RefreshCountdownText();
-        if (_matchRemainingTime <= 0f)
+        if (isServer)
         {
-            _matchRemainingTime = 0f;
-            if (showCountdownText)
-                RefreshCountdownText();
-            EndMatch(false, failTitle);
+            // 仅控制器实例负责倒计时，并同步到所有玩家实例，保证客户端倒计时一致
+            if (this == s_serverMatchController)
+            {
+                _matchRemainingTime -= Time.deltaTime;
+
+                if (_matchRemainingTime <= 0f)
+                    _matchRemainingTime = 0f;
+
+                PlayerHealth[] all = GetServerPlayersCache();
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (all[i] == null) continue;
+                    all[i]._matchRemainingTime = _matchRemainingTime;
+                }
+
+                if (_matchRemainingTime <= 0f)
+                    EndMatchServer(false);
+            }
         }
+
+        if (showCountdownText && isLocalPlayer)
+            RefreshCountdownText();
     }
 
     public void TakeDamage(float damage)
     {
+        if (!isServer)
+            return;
+
         if (_isDead || damage <= 0f)
             return;
 
@@ -199,6 +290,51 @@ public class PlayerHealth : MonoBehaviour
         }
     }
 
+    void OnCurrentHealthNetChanged(float oldValue, float newValue)
+    {
+        // 只有 UI/表现需要在客户端同步；服务器逻辑仍由 TakeDamage/Die 处理
+        UpdateHealthUI();
+
+        // 客户端受击表现：当血量下降时，触发红色闪烁
+        if (!isServer && newValue < oldValue - 0.0001f)
+        {
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.color = hurtColor;
+                CancelInvoke(nameof(ResetColor));
+                Invoke(nameof(ResetColor), hurtFlashTime);
+            }
+        }
+
+        // 服务器上死亡/胜负判定由 Die() 统一处理，避免 hook 抢先把 _isDead 置为 true，
+        // 导致 Die() 早退从而不触发“所有玩家死亡”的胜负逻辑。
+        if (isServer)
+            return;
+
+        if (newValue <= 0f && !_isDead)
+        {
+            // 客户端仅切换死亡表现（不触发胜负判定）
+            _isDead = true;
+            if (spriteRenderer != null && deadSprite != null)
+            {
+                Animator anim = GetComponent<Animator>();
+                if (anim != null)
+                    anim.enabled = false;
+                spriteRenderer.sprite = deadSprite;
+                spriteRenderer.color = Color.white;
+            }
+        }
+    }
+
+    void OnMatchEndedNetChanged(bool oldValue, bool newValue)
+    {
+        if (!newValue)
+            return;
+
+        // 同步到每个客户端后，在“本地玩家实例”上禁用操作并弹出结算 UI
+        OnMatchEndedClient();
+    }
+
     private void ResetColor()
     {
         if (spriteRenderer != null)
@@ -209,6 +345,11 @@ public class PlayerHealth : MonoBehaviour
 
     private void UpdateHealthUI()
     {
+        // 场景里通常只有“一份全局玩家血量 UI”（名字叫 HealthBar / PlayerHealthText）。
+        // 为了让 host/client 两边的血条不会互相被远端玩家覆盖：只让本地玩家实例写 UI。
+        if (NetworkClient.active && !isLocalPlayer)
+            return;
+
         // 更新血量条
         if (healthFillImage != null && maxHealth > 0)
         {
@@ -238,12 +379,36 @@ public class PlayerHealth : MonoBehaviour
             spriteRenderer.color = Color.white;
         }
 
-        EndMatch(false, failTitle);
-
         // TODO: 播放死亡动画 / 复活逻辑等
         Debug.Log("Player died.");
         Died?.Invoke();
         onPlayerDied?.Invoke();
+
+        // 胜负判定：只有“所有玩家都死亡”才失败
+        if (isServer)
+        {
+            TryEndMatchIfAllPlayersDead();
+        }
+    }
+
+    void TryEndMatchIfAllPlayersDead()
+    {
+        if (_matchEnded)
+            return;
+
+        PlayerHealth[] all = GetServerPlayersCache();
+        int alive = 0;
+        for (int i = 0; i < all.Length; i++)
+        {
+            if (all[i] == null) continue;
+            if (!all[i]._isDead)
+                alive++;
+        }
+
+        if (alive <= 0)
+        {
+            EndMatchServer(false);
+        }
     }
 
     /// <summary>
@@ -252,6 +417,8 @@ public class PlayerHealth : MonoBehaviour
     /// <param name="amount">回复量（正数有效）</param>
     public void Heal(float amount)
     {
+        if (!isServer)
+            return;
         if (_isDead || amount <= 0) return;
 
         currentHealth += amount;
@@ -427,36 +594,93 @@ public class PlayerHealth : MonoBehaviour
 
     void OnMineGoldChanged(int current, int max)
     {
+        if (!isServer)
+            return;
+        if (this != s_serverMatchController)
+            return;
         if (_matchEnded)
             return;
 
+        // 同步金矿数值到所有客户端，保证 UI 也跟随变化
+        RpcSyncMineGold(current, max);
+
         if (current <= 0)
         {
-            EndMatch(false, failTitle);
+            EndMatchServer(false);
             return;
         }
 
         if (max > 0 && current >= max && _matchRemainingTime > 0f)
         {
-            EndMatch(true, successTitle);
+            EndMatchServer(true);
         }
     }
 
-    void EndMatch(bool isSuccess, string title)
+    [ClientRpc]
+    void RpcSyncMineGold(int current, int max)
     {
-        if (_matchEnded)
+        // 避免 host（Server+Client）下出现递归：
+        // OnMineGoldChanged(服务器) -> RpcSyncMineGold(Host本地执行) -> SetGoldNetwork -> GoldChanged -> OnMineGoldChanged ...
+        if (isServer)
             return;
-        _matchEnded = true;
+
+        if (goldMineController == null)
+            goldMineController = FindObjectOfType<GoldMineController>();
+
+        if (goldMineController != null)
+            goldMineController.SetGoldNetwork(current, max);
+    }
+
+    void EndMatchServer(bool isSuccess)
+    {
+        if (!isServer)
+            return;
+        if (s_serverMatchEndedGuard || _matchEnded)
+            return;
+
+        s_serverMatchEndedGuard = true;
+
+        // 将胜负结果同步给所有玩家对象，保证每个客户端的“本地玩家实例”都会触发胜负 UI。
+        PlayerHealth[] all = GetServerPlayersCache();
+        for (int i = 0; i < all.Length; i++)
+        {
+            if (all[i] == null) continue;
+            all[i]._matchEnded = true;
+            all[i]._matchIsSuccess = isSuccess;
+            all[i]._matchRemainingTime = 0f;
+        }
+
+        // 服务器当前对象也可以立即更新（host 模式）
+        OnMatchEndedClient();
+    }
+
+    static PlayerHealth[] GetServerPlayersCache()
+    {
+        if (s_cachedPlayers != null && Time.time < s_cachedPlayersUntil)
+            return s_cachedPlayers;
+
+        s_cachedPlayers = FindObjectsOfType<PlayerHealth>();
+        s_cachedPlayersUntil = Time.time + Mathf.Max(0.1f, s_cachedPlayersRefreshInterval);
+        return s_cachedPlayers;
+    }
+
+    void OnMatchEndedClient()
+    {
+        // 只在本地玩家上禁用操作并显示 UI
+        if (!isLocalPlayer)
+            return;
 
         DisablePlayerControl();
         if (showGameOverGrayOverlay)
             ShowGameOverOverlay();
 
+        bool isSuccess = _matchIsSuccess;
+        string title = isSuccess ? successTitle : failTitle;
+
         ApplyResultTitleVisual(isSuccess, title);
         if (countdownText != null)
             countdownText.gameObject.SetActive(false);
     }
-
     void ApplyResultTitleVisual(bool isSuccess, string title)
     {
         if (_resultTitleText == null)

@@ -13,6 +13,8 @@ GameObject:
   - component: {fileID: 1481342113414845586}
   - component: {fileID: 993276547390517913}
   - component: {fileID: 4060630213987507639}
+  - component: {fileID: 933608448791770488}
+  - component: {fileID: 6753058559883628304}
   m_Layer: 0
   m_Name: Fire
   m_TagString: Untagged
@@ -155,3 +157,57 @@ CircleCollider2D:
   m_Offset: {x: 0, y: -0.1475437}
   serializedVersion: 2
   m_Radius: 0.21966752
+--- !u!114 &933608448791770488
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6514788286974257149}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b91ecbcc199f4492b9a91e820070131, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sceneId: 0
+  _assetId: 1773149174
+  serverOnly: 0
+  visibility: 0
+  hasSpawned: 0
+--- !u!114 &6753058559883628304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6514788286974257149}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ff3ba0becae47b8b9381191598957c8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncMethod: 1
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  target: {fileID: 5396812028244655069}
+  updateMethod: 1
+  syncPosition: 1
+  syncRotation: 1
+  syncScale: 0
+  onlySyncOnChange: 0
+  compressRotation: 1
+  interpolatePosition: 1
+  interpolateRotation: 1
+  interpolateScale: 1
+  coordinateSpace: 1
+  timelineOffset: 1
+  showGizmos: 0
+  showOverlay: 0
+  overlayColor: {r: 0, g: 0, b: 0, a: 0.5}
+  onlySyncOnChangeCorrectionMultiplier: 2
+  rotationSensitivity: 0.01
+  positionPrecision: 0.001
+  rotationPrecision: 0.001
+  scalePrecision: 0.01
+  debugDraw: 0

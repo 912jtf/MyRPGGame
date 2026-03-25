@@ -242,4 +242,19 @@ public class GoldMineController : MonoBehaviour
             onMineDepleted?.Invoke();
         }
     }
+
+    /// <summary>
+    /// 网络同步用：服务端把最新金量广播到客户端，用于让客户端 UI 也跟随变化。
+    /// </summary>
+    public void SetGoldNetwork(int current, int max)
+    {
+        maxGold = Mathf.Max(1, max);
+        _currentGold = Mathf.Clamp(current, 0, maxGold);
+
+        _depletedEventSent = false;
+        _fillTarget = maxGold > 0 ? (float)_currentGold / maxGold : 0f;
+        _fillDisplay = _fillTarget;
+
+        RefreshUIAndNotify();
+    }
 }

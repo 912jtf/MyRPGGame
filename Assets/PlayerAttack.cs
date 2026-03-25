@@ -69,6 +69,16 @@ public class PlayerAttack : MonoBehaviour
 
     private Transform _attackAreaTransform;
 
+    [Header("Net Debug (player remote anim)")]
+    public bool debugRemoteAnimLog = true;
+    public float remoteAnimLogDurationSeconds = 15f;
+    private float _remoteAnimLogUntilTime;
+
+    private bool _lastRemoteIsAttacking;
+    private int _lastRemoteComboStep;
+    private bool _lastRemoteIsHeavy;
+    private bool _lastRemoteInit;
+
     private void Awake()
     {
         animator = GetComponent<Animator>();
@@ -77,11 +87,50 @@ public class PlayerAttack : MonoBehaviour
         if (hitbox == null)
             hitbox = GetComponentInChildren<PlayerAttackHitbox>();
         _attackAreaTransform = hitbox != null ? hitbox.transform : transform.Find("attackarea");
+
+        _remoteAnimLogUntilTime = Time.time + remoteAnimLogDurationSeconds;
+        _lastRemoteInit = false;
     }
 
     private void LateUpdate()
     {
         SyncAttackAreaFacing();
+
+        if (!debugRemoteAnimLog)
+            return;
+        if (_netIdentity == null || _netIdentity.isLocalPlayer)
+            return;
+        if (Time.time > _remoteAnimLogUntilTime)
+            return;
+
+        bool hasIsAttacking = HasAnimatorBool(animator, "isattacking");
+        bool isAttacking = hasIsAttacking ? animator.GetBool("isattacking") : false;
+        bool hasIsHeavy = HasAnimatorBool(animator, "isHeavyAttack");
+        bool isHeavy = hasIsHeavy ? animator.GetBool("isHeavyAttack") : false;
+        int comboStep = 0;
+        if (animator != null)
+            comboStep = animator.GetInteger("ComboStep");
+
+        if (!_lastRemoteInit)
+        {
+            _lastRemoteIsAttacking = isAttacking;
+            _lastRemoteIsHeavy = isHeavy;
+            _lastRemoteComboStep = comboStep;
+            _lastRemoteInit = true;
+            return;
+        }
+
+        // Only print when something meaningful flips: start/stop attack or combo step changes.
+        bool attackChanged = isAttacking != _lastRemoteIsAttacking;
+        bool heavyChanged = isHeavy != _lastRemoteIsHeavy;
+        bool comboChanged = comboStep != _lastRemoteComboStep;
+        if (attackChanged || heavyChanged || comboChanged)
+        {
+            Debug.Log($"[NetJitter] RemotePlayerAnimChange isattacking={isAttacking} comboStep={comboStep} isHeavy={isHeavy} t={Time.time:F2} name={name}");
+            _lastRemoteIsAttacking = isAttacking;
+            _lastRemoteIsHeavy = isHeavy;
+            _lastRemoteComboStep = comboStep;
+        }
     }
 
     /// <summary>
@@ -253,6 +302,10 @@ public class PlayerAttack : MonoBehaviour
     /// </summary>
     public void OnAttackHit()
     {
+        // 伤害必须由服务器结算，避免 client 因为本地/远端物理状态不同导致命中判定不一致。
+        if (!NetworkServer.active)
+            return;
+
         if (circleDamageOnlyWhenNoHitbox && hitbox != null)
             return;
         if (attackRange <= 0f)

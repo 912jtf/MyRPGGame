@@ -7432,7 +7432,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4546663217882423377, guid: 54069dd54202be146b2f4232eed7ae7b, type: 3}
       propertyPath: debugMineLog
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4546663217882423377, guid: 54069dd54202be146b2f4232eed7ae7b, type: 3}
       propertyPath: stealHitsRequired
@@ -13283,10 +13283,16 @@ MonoBehaviour:
   playerPrefab: {fileID: 7989021357002233796, guid: f67f725f25059c04ca0093a58fa552b6, type: 3}
   autoCreatePlayer: 1
   playerSpawnMethod: 0
-  spawnPrefabs: []
+  spawnPrefabs:
+  - {fileID: 5372239900540787393, guid: b240cb02e59aac54e8b52e893576e4e2, type: 3}
+  - {fileID: 6754537915923992103, guid: 1b5a0f97e77b48a4288c2d0d1df40752, type: 3}
+  - {fileID: 949960694997253339, guid: 92368001d738d74419376c88cf334683, type: 3}
+  - {fileID: 6514788286974257149, guid: 5be7e995733eb194eba38f8ab6224c09, type: 3}
+  - {fileID: 130034253271366145, guid: 1d43f635acb7bba4886222c6def3812e, type: 3}
+  - {fileID: 2769371326490797523, guid: 9ae7121a8cbe4d549b478e09f0af2705, type: 3}
   snapshotSettings:
-    bufferTimeMultiplier: 2
-    bufferLimit: 32
+    bufferTimeMultiplier: 4
+    bufferLimit: 64
     catchupNegativeThreshold: -1
     catchupPositiveThreshold: 1
     catchupSpeed: 0.019999999552965164

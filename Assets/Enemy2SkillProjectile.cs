@@ -1,4 +1,5 @@
 using UnityEngine;
+using Mirror;
 
 /// <summary>
 /// enemy2 技能弹丸：负责移动、触发命中玩家并调用 PlayerHealth.TakeDamage。
@@ -73,6 +74,10 @@ public class Enemy2SkillProjectile : MonoBehaviour
 
     void Start()
     {
+        // 由服务器生成并驱动：客户端只负责接收 NetworkTransform 的位移
+        if (!NetworkServer.active)
+            return;
+
         _canDamage = !onlyDamageOnFinalFrame;
         _finalDamageQueued = false;
         Destroy(gameObject, lifeTime);
@@ -100,6 +105,9 @@ public class Enemy2SkillProjectile : MonoBehaviour
 
     void Update()
     {
+        if (!NetworkServer.active)
+            return;
+
         // 如果没有刚体，就用 transform 移动保证效果可用
         // 当动画最后爆炸帧触发时，我们不瞬移，而是排队等待飞行到目的地附近后再真正开启伤害
         if (_finalDamageQueued && _hasTargetDestination && !_arrived)
@@ -136,6 +144,9 @@ public class Enemy2SkillProjectile : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
+        if (!NetworkServer.active)
+            return;
+
         if (destroyOnObstacleHit && IsInObstacleLayer(other))
         {
             Destroy(gameObject);
@@ -147,6 +158,9 @@ public class Enemy2SkillProjectile : MonoBehaviour
 
     void OnTriggerStay2D(Collider2D other)
     {
+        if (!NetworkServer.active)
+            return;
+
         // 避免玩家在爆炸窗口开启前就已进入触发器时漏判伤害
         if (destroyOnObstacleHit && IsInObstacleLayer(other))
         {

@@ -91,11 +91,13 @@ public class PlayerGoldCarrier : MonoBehaviour
     SpriteRenderer _depositPromptRenderer;
     Color _depositPromptBaseColor = Color.white;
     Vector3 _depositPromptBaseScale = Vector3.one;
+    Mirror.NetworkIdentity _netIdentity;
 
     void Awake()
     {
         _spriteRenderer = GetComponent<SpriteRenderer>();
         _pickupTriggerCollider = ResolvePickupTriggerCollider();
+        _netIdentity = GetComponent<Mirror.NetworkIdentity>();
         maxCarry = Mathf.Max(1, maxCarry);
         carryCount = Mathf.Clamp(carryCount, 0, maxCarry);
         TryAutoBindUI();
@@ -115,6 +117,9 @@ public class PlayerGoldCarrier : MonoBehaviour
 
     void Update()
     {
+        if (_netIdentity != null && !_netIdentity.isLocalPlayer)
+            return;
+
         if (Input.GetKeyDown(depositKey))
             TryDepositOneToNearbyMine();
 
