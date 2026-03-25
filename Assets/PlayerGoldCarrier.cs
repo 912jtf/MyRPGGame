@@ -143,29 +143,65 @@ public class PlayerGoldCarrier : NetworkBehaviour
         // 音效：用玩家位置播，避免 3D 衰减导致听不到
         CombatSfxUtil.Play2D(pickupGoldSfx, transform.position, pickupGoldSfxVolume);
 
-        // 特效：在拾取点生成（如果没配 prefab 就跳过）
-        if (pickupVfxPrefab == null)
+        // 你要的是“吸入金块本体”的视觉效果：这里在本地生成一个金块 Sprite 影子并飞向玩家。
+        Vector3 startPos = new Vector3(worldPos.x, worldPos.y, 0f) + new Vector3(0f, pickupVfxOffsetY, 0f);
+        CreateRuntimeMagnetGoldVisual(startPos, transform);
+    }
+
+    void CreateRuntimeMagnetGoldVisual(Vector3 startPos, Transform target)
+    {
+        if (target == null)
             return;
 
-        Vector3 vfxPos = new Vector3(worldPos.x, worldPos.y, 0f) + new Vector3(0f, pickupVfxOffsetY, 0f);
-        GameObject vfxGo = Instantiate(pickupVfxPrefab, vfxPos, Quaternion.identity);
+        // 尽量复用金块 prefab 的 Sprite 外观
+        Sprite sprite = null;
+        int sortingLayerId = 0;
+        int sortingOrder = 5000;
 
-        ParticleSystem[] pss = vfxGo.GetComponentsInChildren<ParticleSystem>(true);
-        float maxT = 2f;
-        if (pss != null && pss.Length > 0)
+        if (goldPickupPrefab != null)
         {
-            foreach (var ps in pss)
+            var prefabSr = goldPickupPrefab.GetComponent<SpriteRenderer>();
+            if (prefabSr != null)
             {
-                if (ps == null) continue;
-                var main = ps.main;
-                float dur = main.duration;
-                float startLife = main.startLifetime.mode == ParticleSystemCurveMode.Constant
-                    ? main.startLifetime.constant
-                    : main.startLifetime.constantMax;
-                maxT = Mathf.Max(maxT, dur + startLife);
+                sprite = prefabSr.sprite;
+                sortingLayerId = prefabSr.sortingLayerID;
+                sortingOrder = Mathf.Max(sortingOrder, prefabSr.sortingOrder + 50);
             }
         }
-        Destroy(vfxGo, maxT + 0.25f);
+
+        GameObject go = new GameObject("GoldMagnetVisual_Runtime");
+        go.transform.position = startPos;
+
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = sprite;
+        sr.sortingLayerID = sortingLayerId;
+        sr.sortingOrder = sortingOrder;
+        sr.color = new Color(1f, 1f, 1f, 0.95f);
+
+        StartCoroutine(CoMoveGoldVisualToTarget(go.transform, target, 0.18f));
+    }
+
+    IEnumerator CoMoveGoldVisualToTarget(Transform vfxTr, Transform targetTr, float duration)
+    {
+        if (vfxTr == null || targetTr == null)
+            yield break;
+
+        float t = 0f;
+        Vector3 start = vfxTr.position;
+        while (t < duration && vfxTr != null && targetTr != null)
+        {
+            t += Time.deltaTime;
+            float u = Mathf.Clamp01(t / Mathf.Max(0.01f, duration));
+            // ease-in
+            u = u * u;
+            vfxTr.position = Vector3.Lerp(start, targetTr.position, u);
+            float s = Mathf.Lerp(1f, 0.25f, u);
+            vfxTr.localScale = new Vector3(s, s, 1f);
+            yield return null;
+        }
+
+        if (vfxTr != null)
+            Destroy(vfxTr.gameObject);
     }
 
     void Awake()
