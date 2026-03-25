@@ -14,6 +14,20 @@ using UnityEngine.UI;
 /// </summary>
 public class PlayerGoldCarrier : NetworkBehaviour
 {
+    static int s_pickupCmdLogCount;
+    const int kMaxPickupCmdLogs = 30;
+
+    static int s_dropCmdLogCount;
+    const int kMaxDropCmdLogs = 10;
+
+    void LogPickupCmd(string msg)
+    {
+        if (s_pickupCmdLogCount >= kMaxPickupCmdLogs)
+            return;
+        s_pickupCmdLogCount++;
+        Debug.Log(msg);
+    }
+
     [Header("携带设置")]
     [Min(1)] public int maxCarry = 2;
     [Min(0)] [SyncVar(hook = nameof(OnCarryCountChanged))]
@@ -101,8 +115,11 @@ public class PlayerGoldCarrier : NetworkBehaviour
         if (!isLocalPlayer)
             return;
 
+        LogPickupCmd($"[OnCarryCountChanged] localCarry {oldValue}->{newValue} max={maxCarry}");
+
         _bagFillTarget = maxCarry > 0 ? (float)carryCount / maxCarry : 0f;
         _bagFillDisplay = _bagFillTarget;
+        RefreshUIAndNotify(); // 让 carryText/bagCapacityText 立刻更新
         UpdateBagFillUI();
         UpdateBagFullFlash();
         UpdateDepositPrompt();
@@ -152,8 +169,15 @@ public class PlayerGoldCarrier : NetworkBehaviour
         }
 
         // 明确防呆：没金块时按 F 不应有任何丢弃行为。
-        if (carryCount > 0 && allowDropByKey && goldPickupPrefab != null)
+        if (carryCount > 0 && goldPickupPrefab != null)
+        {
+            if (s_dropCmdLogCount < kMaxDropCmdLogs)
+            {
+                s_dropCmdLogCount++;
+                Debug.Log($"[PlayerGoldCarrier] Local drop pressed: carryCount={carryCount} goldPickupPrefab={(goldPickupPrefab != null ? "OK" : "NULL")} netClientActive={NetworkClient.active}");
+            }
             TryDropOneRequestToServer();
+        }
 
         UpdateBagFillUI();
         UpdateBagFullFlash();
@@ -211,13 +235,6 @@ public class PlayerGoldCarrier : NetworkBehaviour
         if (pickupNi == null)
             return false;
 
-        bool fullConsume = take >= amount;
-        if (animatePickupMagnet && fullConsume)
-        {
-            pickup.BeginPickupAnimation();
-            StartCoroutine(CoMagnetPickupThenApply(pickup, take)); // 视觉动画：不在客户端扣血/销毁
-        }
-
         CmdTryPickup(pickupNi.netId, take);
         return true;
     }
@@ -234,6 +251,13 @@ public class PlayerGoldCarrier : NetworkBehaviour
 
         while (pickup != null && elapsed < pickupMagnetMaxDuration)
         {
+            // 如果动画期间金块变成了“挂敌人携带”，立刻停止本次吸取视觉，避免假吸导致误解。
+            if (pickup.IsAttachedToEnemyCarrier)
+            {
+                pickup.EndPickupAnimationLocal();
+                yield break;
+            }
+
             elapsed += Time.deltaTime;
             Vector3 target = transform.position + pickupMagnetTargetOffset;
             Vector3 pos = rb != null ? (Vector3)rb.position : pickup.transform.position;
@@ -264,8 +288,8 @@ public class PlayerGoldCarrier : NetworkBehaviour
             yield return null;
         }
 
-        if (pickup == null)
-            yield break;
+        if (pickup != null)
+            pickup.EndPickupAnimationLocal();
     }
 
     [Command]
@@ -278,17 +302,35 @@ public class PlayerGoldCarrier : NetworkBehaviour
         if (carryCount >= maxCarry)
             return;
 
+        int before = carryCount;
+
         if (!NetworkServer.spawned.TryGetValue(pickupNetId, out Mirror.NetworkIdentity ni) || ni == null)
+        {
+            LogPickupCmd($"[CmdTryPickup FAIL] spawned missing netId={pickupNetId} carry={before}/{maxCarry}");
             return;
+        }
 
         GoldPickup pickup = ni.GetComponent<GoldPickup>();
         if (pickup == null)
+        {
+            LogPickupCmd($"[CmdTryPickup FAIL] GoldPickup missing for netId={pickupNetId} carry={before}/{maxCarry}");
             return;
+        }
 
         if (pickup.IsCarriedByEnemy)
+        {
+            LogPickupCmd($"[CmdTryPickup FAIL] pickup carried by enemy netId={pickupNetId} carry={before}/{maxCarry}");
             return;
-        if (!pickup.CanBePicked)
+        }
+        if (!pickup.CanBePickedDetailed(out bool timeOk, out bool animOk, out bool carriedOk, out float nowTime, out float spawnTime, out float readyAt))
+        {
+            LogPickupCmd(
+                $"[CmdTryPickup FAIL] cannot pick netId={pickupNetId} carry={before}/{maxCarry} " +
+                $"now={nowTime:F2} spawn={spawnTime:F2} delay={pickup.pickupDelay:F2} readyAt={readyAt:F2} " +
+                $"timeOk={timeOk} animOk={animOk} carriedOk={carriedOk} isCarried={pickup.IsCarriedByEnemy}"
+            );
             return;
+        }
 
         // 在服务器端也锁定拾取，防止同一帧/多帧重复触发造成多次扣减
         pickup.BeginPickupAnimation();
@@ -297,17 +339,61 @@ public class PlayerGoldCarrier : NetworkBehaviour
         int amount = Mathf.Max(1, pickup.amount);
         int take = Mathf.Min(room, amount, desiredTake);
         if (take <= 0)
+        {
+            LogPickupCmd($"[CmdTryPickup FAIL] computed take<=0 netId={pickupNetId} room={room} amount={pickup.amount} desired={desiredTake} carry={before}/{maxCarry}");
             return;
+        }
 
         // 玩家拾取后该金块永不自动销毁
         pickup.autoDestroyAfter = 0f;
 
-        if (take >= amount)
+        bool fullConsume = take >= amount;
+
+        // 记录服务器端判定信息：便于确认为什么“丢出来又立刻被捡回”。
+        pickup.CanBePickedDetailed(out bool timeOk2, out bool animOk2, out bool carriedOk2, out float nowTime2, out float spawnTime2, out float readyAt2);
+
+        // 先通知客户端：只有服务器“真正成功”才播放吸取视觉。
+        if (fullConsume || take > 0)
+            TargetPickupApproved(connectionToClient, pickupNetId, take, fullConsume);
+
+        if (fullConsume)
             pickup.Consume();
         else
+        {
             pickup.amount = amount - take;
+            pickup.EndPickupAnimationForServer(); // 部分拾取后必须解除拾取锁定
+        }
 
         carryCount += take;
+
+        LogPickupCmd($"[CmdTryPickup OK] netId={pickupNetId} take={take} carry {before}->{carryCount} max={maxCarry} pickupDelay={pickup.pickupDelay:F2} spawnTime={spawnTime2:F2} now={nowTime2:F2} readyAt={readyAt2:F2} timeOk={timeOk2} animOk={animOk2} carriedOk={carriedOk2}");
+    }
+
+    [TargetRpc]
+    void TargetPickupApproved(NetworkConnection target, uint pickupNetId, int take, bool fullConsume)
+    {
+        if (target == null)
+            return;
+
+        // 仅在客户端播放吸取视觉：确保不会出现 server拒绝但 client仍“先吸过去”的错觉。
+        if (!animatePickupMagnet)
+            return;
+
+        if (!NetworkClient.spawned.TryGetValue(pickupNetId, out Mirror.NetworkIdentity ni) || ni == null)
+            return;
+
+        GoldPickup pickup = ni.GetComponent<GoldPickup>();
+        if (pickup == null)
+            return;
+
+        Debug.Log($"[TargetPickupApproved] pickupNetId={pickupNetId} take={take} full={fullConsume} ownerIsLocal={isLocalPlayer}");
+
+        // 防御：如果此时已经被其他系统标记为 carried，则不播放吸取。
+        if (pickup.IsCarriedByEnemy || pickup.IsAttachedToEnemyCarrier)
+            return;
+
+        pickup.BeginPickupAnimation();
+        StartCoroutine(CoMagnetPickupThenApply(pickup, take));
     }
 
     [Command]
@@ -340,16 +426,19 @@ public class PlayerGoldCarrier : NetworkBehaviour
         if (goldPickupPrefab == null)
             return;
 
-        Vector2 spawnPos = (Vector2)transform.position + GetForwardDir() * Mathf.Max(0f, dropForwardDistance);
-        if (dropScatterRadius > 0f)
-            spawnPos += UnityEngine.Random.insideUnitCircle * dropScatterRadius;
+        // 需求：按 F 丢弃必须落在“玩家原地”
+        Vector2 spawnPos = (Vector2)transform.position;
 
+        Debug.Log($"[TryDropOneRequestToServer] carryCount={carryCount} maxCarry={maxCarry} prefab={(goldPickupPrefab != null ? "OK" : "NULL")} spawnPos=({spawnPos.x:F2},{spawnPos.y:F2}) isLocalPlayer={isLocalPlayer} netActive={NetworkClient.active}");
         CmdTryDropGold(spawnPos);
     }
 
     [Command]
     void CmdTryDropGold(Vector2 spawnPos)
     {
+        int before = carryCount;
+        Debug.Log($"[CmdTryDropGold] spawnPos=({spawnPos.x:F2},{spawnPos.y:F2}) carry {before}->{before-1} prefab={(goldPickupPrefab != null ? "OK" : "NULL")} isServer={isServer}");
+
         if (carryCount <= 0)
             return;
 
@@ -365,10 +454,18 @@ public class PlayerGoldCarrier : NetworkBehaviour
         {
             pickup.amount = 1;
             pickup.autoDestroyAfter = 0f;
+            // 掉落后延迟允许拾取，避免玩家立刻捡回（否则会出现“背包 -1 又 +1”）
+            pickup.pickupDelay = 2.0f;
+            pickup.ServerResetSpawnTimeNow();
+            Debug.Log($"[CmdTryDropGold] dropped pickupDelay={pickup.pickupDelay:F2}");
         }
 
         EnsureNetworkedGoldPickup(go);
         NetworkServer.Spawn(go);
+
+        NetworkIdentity droppedNi = go.GetComponent<NetworkIdentity>();
+        if (droppedNi != null)
+            Debug.Log($"[CmdTryDropGold] spawned droppedGold netId={droppedNi.netId}");
 
         carryCount = Mathf.Max(0, carryCount - 1);
     }
@@ -384,9 +481,21 @@ public class PlayerGoldCarrier : NetworkBehaviour
         if (go.GetComponent<NetworkTransformReliable>() == null)
         {
             var nt = go.AddComponent<NetworkTransformReliable>();
+            // 必须显式设置 target，避免 NetworkTransformReliable 在 LateUpdate 中访问 null
+            nt.target = go.transform;
             nt.syncPosition = true;
             nt.syncRotation = true;
             nt.syncScale = false;
+            nt.coordinateSpace = Mirror.CoordinateSpace.World;
+            nt.updateMethod = Mirror.UpdateMethod.FixedUpdate;
+        }
+        else
+        {
+            var nt = go.GetComponent<NetworkTransformReliable>();
+            if (nt != null && nt.target == null)
+                nt.target = go.transform;
+            if (nt != null)
+                nt.coordinateSpace = Mirror.CoordinateSpace.World;
         }
     }
 
@@ -444,6 +553,10 @@ public class PlayerGoldCarrier : NetworkBehaviour
         {
             pickup.amount = 1;
             pickup.autoDestroyAfter = 0f;
+            // 掉落后延迟允许拾取，避免玩家立刻把自己丢的金块吸回背包
+            pickup.pickupDelay = 2.0f;
+            pickup.ServerResetSpawnTimeNow();
+            Debug.Log($"[CmdTryDropGold] pickupDelay={pickup.pickupDelay:F2} after reset spawnTimeNow");
         }
 
         carryCount -= 1;

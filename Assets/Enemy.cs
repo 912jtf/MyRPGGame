@@ -1540,6 +1540,7 @@ public class Enemy : MonoBehaviour
         if (pickup == null)
             pickup = go.AddComponent<GoldPickup>();
         pickup.amount = Mathf.Max(1, pickup.amount);
+        pickup.pickupDelay = 0f; // 保证掉落/偷取金块立即可拾取
         EnsurePickupTrigger(go);
 
         EnsureNetworkedGoldPickup(go);
@@ -1606,11 +1607,23 @@ public class Enemy : MonoBehaviour
         if (go.GetComponent<NetworkTransformReliable>() == null)
         {
             var nt = go.AddComponent<NetworkTransformReliable>();
+            // 必须显式设置 target，避免 LateUpdate 访问 null
+            nt.target = go.transform;
             nt.syncPosition = true;
             nt.syncRotation = true;
             nt.syncScale = false;
+            nt.coordinateSpace = Mirror.CoordinateSpace.World;
             nt.interpolatePosition = true;
             nt.interpolateRotation = true;
+            nt.updateMethod = Mirror.UpdateMethod.FixedUpdate;
+        }
+        else
+        {
+            var nt = go.GetComponent<NetworkTransformReliable>();
+            if (nt != null && nt.target == null)
+                nt.target = go.transform;
+            if (nt != null)
+                nt.coordinateSpace = Mirror.CoordinateSpace.World;
         }
     }
 
@@ -1711,6 +1724,7 @@ public class Enemy : MonoBehaviour
         pickup.amount = amount;
         // 携带期间：不允许被拾取、也不自动销毁。
         pickup.autoDestroyAfter = 0f;
+        pickup.pickupDelay = 0f;
         pickup.SetCarriedByEnemy(true);
 
         // 无论 prefab 如何配，强制改成可触发拾取且不受重力影响（避免掉地上堆叠）。
@@ -1746,6 +1760,7 @@ public class Enemy : MonoBehaviour
 
         // 死亡掉落后：恢复为可拾取地面金块，并保持常驻（不自动消失）。
         pickup.autoDestroyAfter = 0f;
+        pickup.pickupDelay = 0f;
         pickup.SetCarriedByEnemy(false);
     }
 
