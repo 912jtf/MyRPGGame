@@ -899,7 +899,7 @@ Tilemap:
       - {fileID: 347383660, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 2119947242, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -1052858685, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5
+      m_AnimationSpeed: 5.0000005
       m_AnimationTimeOffset: 0
       m_Flags: 0
   - first: {x: 5, y: -4, z: 0}
@@ -9399,7 +9399,7 @@ MonoBehaviour:
   useBounds: 1
   minPosition: {x: -15.92, y: -8.79}
   maxPosition: {x: 15.92, y: 8.79}
-  maxEnemies: 10
+  maxEnemies: 1
   goldMine: {fileID: 4546663217882423377, guid: 54069dd54202be146b2f4232eed7ae7b, type: 3}
   obstacleLayers:
     serializedVersion: 2
@@ -10939,6 +10939,8 @@ MonoBehaviour:
   loop: 1
   dontDestroyOnLoad: 1
   singleton: 1
+  muteOnDedicatedServer: 1
+  attachToMainCamera: 0
 --- !u!4 &1448305579
 Transform:
   m_ObjectHideFlags: 0
@@ -12869,7 +12871,7 @@ Tilemap:
       - {fileID: 1349786135, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: 1634444482, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
       - {fileID: -223863132, guid: ce956c4c478e2024da51a0f89b2ca171, type: 3}
-      m_AnimationSpeed: 5
+      m_AnimationSpeed: 5.0000005
       m_AnimationTimeOffset: 0
       m_Flags: 0
   m_TileAssetArray:
@@ -14808,6 +14810,7 @@ MonoBehaviour:
   spawnOnStart: 1
   randomSeed: -1
   spawnParent: {fileID: 0}
+  debugSpawnLogs: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

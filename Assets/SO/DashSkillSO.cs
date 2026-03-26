@@ -26,7 +26,6 @@ public class DashSkillSO : SkillSO
     public override void Activate(PlayerSkills owner)
     {
         if (owner == null) return;
-        // Dash 由服务器执行，保证位置/碰撞结果两边一致
         if (!NetworkServer.active)
             return;
 
@@ -36,58 +35,38 @@ public class DashSkillSO : SkillSO
         Rigidbody2D rb = owner.GetComponent<Rigidbody2D>();
         SpriteRenderer sr = owner.GetComponent<SpriteRenderer>();
 
+        // 优先用 Cmd 里记录的 LastCastVelocity（客户端按键瞬间的移动方向），避免服务器上 rb.velocity 与朝向不同步导致“倒着冲”。
         Vector2 dir = Vector2.zero;
-
-        // 1. 有移动速度时，沿当前移动方向冲刺
-        if (rb != null && rb.velocity.sqrMagnitude > 0.001f)
-        {
+        if (owner.LastCastVelocity.sqrMagnitude > 0.001f)
+            dir = owner.LastCastVelocity.normalized;
+        else if (rb != null && rb.velocity.sqrMagnitude > 0.001f)
             dir = rb.velocity.normalized;
-        }
         else if (sr != null)
         {
-            // 2. 静止时，根据朝向决定“向后”方向
-            // flipX == false：脸朝右；flipX == true：脸朝左
-            float faceX = sr.flipX ? -1f : 1f;
-            // 向后 = 朝向的反方向
-            dir = new Vector2(-faceX, 0f);
+            // flipX=true 时贴图朝左，冲刺方向为 (-1,0)；flipX=false 朝右，为 (1,0)。此前用 -faceX 会左右反了。
+            dir = new Vector2(sr.flipX ? -1f : 1f, 0f);
         }
         else
-        {
-            // 3. 兜底：向左闪避
             dir = Vector2.left;
-        }
 
         if (dir.sqrMagnitude < 0.001f) return;
 
-        CombatSfxUtil.Play2D(castSfx, t.position, castSfxVolume);
-
-        // 先根据碰撞体修正终点，防止穿墙
         Vector3 startPos = t.position;
         Collider2D ownerCol = owner.GetComponent<Collider2D>();
         Vector3 endPos = ComputeDashEndPosition(startPos, dir.normalized, ownerCol);
 
-        // 0 或负数时，保持原来的“瞬移”感
-        if (dashDuration <= 0f)
-        {
-            t.position = endPos;
-            return;
-        }
-
-        // 否则使用协程，在 dashDuration 内平滑移动
-        owner.StartCoroutine(DashRoutine(owner.gameObject, startPos, endPos));
+        // 玩家 NetworkTransform 为 Client→Server 时，服务器上改 transform 会被客户端下一帧位置覆盖。
+        // 冲刺位移必须在「拥有者客户端」执行，由 NetworkTransform 同步到服务器与其它客户端。
+        float dur = Mathf.Max(0f, dashDuration);
+        owner.ServerNotifyDash(endPos, dur);
     }
 
-    /// <summary>
-    /// 从 startPos 朝 dirNormalized 方向尝试 dashDistance 距离，
-    /// 如果遇到 obstacleLayers 上的碰撞体，则终点停在碰撞点前一点。
-    /// </summary>
-    private Vector3 ComputeDashEndPosition(Vector3 startPos, Vector2 dirNormalized, Collider2D ownerCol)
+    Vector3 ComputeDashEndPosition(Vector3 startPos, Vector2 dirNormalized, Collider2D ownerCol)
     {
         float dist = Mathf.Max(0f, dashDistance);
         if (dist <= 0f)
             return startPos;
 
-        // 1) 优先用玩家自身碰撞体做 Cast（比 Raycast 点检测更不容易穿墙）。
         if (ownerCol != null)
         {
             ContactFilter2D filter = new ContactFilter2D
@@ -96,7 +75,6 @@ public class DashSkillSO : SkillSO
                 useLayerMask = true
             };
 
-            // 若未配置 obstacleLayers，默认检测所有碰撞层。
             int mask = obstacleLayers.value != 0 ? obstacleLayers.value : Physics2D.DefaultRaycastLayers;
             filter.SetLayerMask(mask);
 
@@ -117,7 +95,6 @@ public class DashSkillSO : SkillSO
             }
         }
 
-        // 2) 兜底：没有碰撞体时用 Raycast。
         int rayMask = obstacleLayers.value != 0 ? obstacleLayers.value : Physics2D.DefaultRaycastLayers;
         RaycastHit2D hit = Physics2D.Raycast(startPos, dirNormalized, dist, rayMask);
         if (hit.collider != null)
@@ -125,37 +102,4 @@ public class DashSkillSO : SkillSO
 
         return startPos + (Vector3)(dirNormalized * dist);
     }
-
-    private System.Collections.IEnumerator DashRoutine(GameObject target, Vector3 startPos, Vector3 endPos)
-    {
-        if (target == null) yield break;
-
-        Transform t = target.transform;
-        if (t == null) yield break;
-
-        Rigidbody2D rb = target.GetComponent<Rigidbody2D>();
-
-        float elapsed = 0f;
-
-        // 冲刺过程中可选地把刚体速度清零，避免抖动
-        if (rb != null)
-        {
-            rb.velocity = Vector2.zero;
-        }
-
-        while (elapsed < dashDuration)
-        {
-            elapsed += Time.deltaTime;
-            float t01 = Mathf.Clamp01(elapsed / dashDuration);
-
-            // 这里用线性插值（如需更柔和可以改成缓入缓出曲线）
-            t.position = Vector3.Lerp(startPos, endPos, t01);
-
-            yield return null;
-        }
-
-        // 结束时确保精确落在目标点
-        t.position = endPos;
-    }
 }
-

@@ -131,10 +131,16 @@ public class EnemyHealth : NetworkBehaviour
 
     public void TakeDamage(float damage)
     {
-        TakeDamage(damage, transform.position);
+        TakeDamage(damage, transform.position, 0u);
     }
 
     public void TakeDamage(float damage, Vector2 hitSourceWorldPos)
+    {
+        TakeDamage(damage, hitSourceWorldPos, 0u);
+    }
+
+    /// <param name="attackerPlayerNetId">造成伤害的玩家 NetworkIdentity.netId；0 表示未知来源（不播放“打击者专属”受击音）。</param>
+    public void TakeDamage(float damage, Vector2 hitSourceWorldPos, uint attackerPlayerNetId)
     {
         // 敌人生命/死亡必须由服务器结算，避免客户端“击杀成功但对象不消失”的不同步
         if (!NetworkServer.active)
@@ -155,7 +161,7 @@ public class EnemyHealth : NetworkBehaviour
             currentHealth = 0f;
         }
 
-        CombatSfxUtil.Play2D(hurtSfx, transform.position, hurtSfxVolume);
+        TryPlayHitSfxForAttackerOnly(attackerPlayerNetId);
 
         // 受击闪红
         if (spriteRenderer != null)
@@ -177,6 +183,22 @@ public class EnemyHealth : NetworkBehaviour
         {
             Die();
         }
+    }
+
+    /// <summary>野怪挨打音效只在“动手的那名玩家”窗口播放，避免 Host/Client 互相听到对方打野声。</summary>
+    void TryPlayHitSfxForAttackerOnly(uint attackerPlayerNetId)
+    {
+        if (attackerPlayerNetId == 0)
+            return;
+        if (!NetworkServer.spawned.TryGetValue(attackerPlayerNetId, out NetworkIdentity attackerNi) || attackerNi == null)
+            return;
+        PlayerSkills ps = attackerNi.GetComponent<PlayerSkills>();
+        if (ps == null)
+            return;
+        NetworkIdentity selfNi = GetComponent<NetworkIdentity>();
+        if (selfNi == null)
+            return;
+        ps.TargetPlayEnemyHurtSfxAtOwnerClient(selfNi.netId);
     }
 
     void OnCurrentHealthChanged(float oldValue, float newValue)
@@ -221,10 +243,29 @@ public class EnemyHealth : NetworkBehaviour
             playerLevel.AddExp(expReward);
         }
 
-        // 这里可以改成播放死亡动画、掉落等
+        // 延后销毁：让掉落金块的解绑 / SyncVar 先同步到各客户端，避免子物体金块随野怪一起被删。
         if (NetworkServer.active && GetComponent<NetworkIdentity>() != null)
-            NetworkServer.Destroy(gameObject);
+            Invoke(nameof(ServerDestroyEnemyAfterGoldDetach), 0.12f);
         else
             Destroy(gameObject);
+    }
+
+    void ServerDestroyEnemyAfterGoldDetach()
+    {
+        if (gameObject != null)
+            NetworkServer.Destroy(gameObject);
+    }
+
+    /// <summary>
+    /// 携带金块落地：服务端已 SetParent(null)，客户端可能仍把金块挂在野怪下，Destroy 野怪会误删金块。
+    /// </summary>
+    [ClientRpc]
+    public void RpcDetachCarriedGoldToWorld(uint goldNetId)
+    {
+        if (goldNetId == 0)
+            return;
+        if (!NetworkClient.spawned.TryGetValue(goldNetId, out NetworkIdentity ni) || ni == null)
+            return;
+        ni.transform.SetParent(null, worldPositionStays: true);
     }
 }

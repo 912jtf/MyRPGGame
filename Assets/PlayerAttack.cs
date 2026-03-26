@@ -277,9 +277,9 @@ public class PlayerAttack : NetworkBehaviour
             return false;
 
         // 联机模式下统一走“动画命中帧 -> CmdAttackHit -> 服务器圆形判定”这一条路径。
-        // 因此禁用 Hitbox Trigger 的伤害结算，避免与 CmdAttackHit 叠加导致双倍伤害，
-        // 同时保证 host/client 完全一致的伤害来源与判定逻辑。
-        if (NetworkClient.active)
+        // 因此无论是 Host 还是 Dedicated Server，都禁用 Hitbox Trigger 的伤害结算，
+        // 避免与 CmdAttackHit / 动画事件叠加导致双倍伤害。
+        if (NetworkClient.active || NetworkServer.active)
             return false;
 
         if (((1 << other.gameObject.layer) & enemyLayer) == 0)
@@ -333,9 +333,18 @@ public class PlayerAttack : NetworkBehaviour
             if (animator != null)
                 comboStep = Mathf.Clamp(animator.GetInteger("ComboStep"), 1, 3);
             bool flipX = spriteRenderer != null && spriteRenderer.flipX;
-            CmdAttackHit((Vector2)transform.position, flipX, _currentAttackIsHeavy, comboStep, _currentAttackInstanceId);
+            Rigidbody2D rb = GetComponent<Rigidbody2D>();
+            Vector2 vel = rb != null ? rb.velocity : Vector2.zero;
+            double castServerTime = NetworkTime.time;
+            CmdAttackHit((Vector2)transform.position, vel, castServerTime, flipX, _currentAttackIsHeavy, comboStep, _currentAttackInstanceId);
             return;
         }
+
+        // Host 模式下（Server+Client 同进程），服务器端也会播放远端玩家的动画并触发 Animation Event。
+        // 若在这里直接 ServerApplyAttackHit，会与远端玩家发来的 CmdAttackHit 叠加，导致“client 轻击 = 2 点伤害”。
+        // 因此：只要存在客户端（Host），就完全依赖 CmdAttackHit 来做权威结算。
+        if (NetworkClient.active)
+            return;
 
         // 纯服务器（Dedicated）模式下，仍允许服务器端直接结算（若动画事件在服务器侧触发）。
         if (!NetworkServer.active)
@@ -345,7 +354,7 @@ public class PlayerAttack : NetworkBehaviour
     }
 
     [Command]
-    void CmdAttackHit(Vector2 attackerPos, bool flipX, bool isHeavy, int comboStep, uint attackInstanceId)
+    void CmdAttackHit(Vector2 attackerPos, Vector2 attackerVelocity, double castServerTime, bool flipX, bool isHeavy, int comboStep, uint attackInstanceId)
     {
         // 同一段攻击只允许结算一次（client 发送重复命中帧、或网络延迟导致 dedup window 失效时也能兜住）
         if (attackInstanceId != 0)
@@ -361,7 +370,13 @@ public class PlayerAttack : NetworkBehaviour
             return;
         _serverLastAttackHitTime = now;
 
-        ServerApplyAttackHit(attackerPos, flipX, isHeavy, comboStep);
+        // 用 NetworkTime 推算“命中判定执行那一刻”的施放位置，
+        // 避免客户端/服务器位置同步存在时间差导致命中判定不一致。
+        double dtDouble = NetworkTime.time - castServerTime;
+        float dt = Mathf.Clamp((float)dtDouble, 0f, 0.5f);
+        Vector2 predictedAttackerPos = attackerPos + attackerVelocity * dt;
+
+        ServerApplyAttackHit(predictedAttackerPos, flipX, isHeavy, comboStep);
     }
 
     void ServerApplyAttackHit(Vector2 attackerPos, bool flipX, bool isHeavy, int comboStep)
@@ -419,7 +434,8 @@ public class PlayerAttack : NetworkBehaviour
                 continue;
             damaged.Add(id);
 
-            enemyHealth.TakeDamage(dmg, attackerPos);
+            uint attackerNetId = _netIdentity != null ? _netIdentity.netId : 0u;
+            enemyHealth.TakeDamage(dmg, attackerPos, attackerNetId);
         }
     }
 

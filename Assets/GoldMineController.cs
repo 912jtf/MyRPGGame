@@ -1,4 +1,5 @@
 using System;
+using Mirror;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -136,7 +137,11 @@ public class GoldMineController : MonoBehaviour
 
         _currentStealHitCount = 0;
         _currentGold = Mathf.Max(0, _currentGold - 1);
-        CombatSfxUtil.Play2D(mineHitByEnemySfx, transform.position, mineHitByEnemySfxVolume);
+        // 偷矿为共同目标：与投递一致，由 PlayerHealth ClientRpc 让所有客户端（含 Host）播放
+        if (NetworkServer.active)
+            PlayerHealth.ServerBroadcastMineStealSfx(transform.position);
+        else
+            CombatSfxUtil.Play2D(mineHitByEnemySfx, transform.position, mineHitByEnemySfxVolume);
         if (debugMineLog)
             Debug.Log($"[GoldMine:{name}#{GetInstanceID()}] STEAL SUCCESS enemyId={enemyId}, current={_currentGold}/{maxGold}");
         RefreshUIAndNotify();
@@ -157,7 +162,7 @@ public class GoldMineController : MonoBehaviour
 
         if (added > 0)
         {
-            CombatSfxUtil.Play2D(mineDepositSfx, transform.position, mineDepositSfxVolume);
+            // 投递音效由 PlayerGoldCarrier 的 ClientRpc 在所有客户端播放（共同目标，Host/Client 都听见）。
             RefreshUIAndNotify();
         }
 

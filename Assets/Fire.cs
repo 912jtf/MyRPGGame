@@ -110,7 +110,7 @@ public class Fire : NetworkBehaviour
 
         EnemyHealth enemyHealth = other.GetComponent<EnemyHealth>();
         if (enemyHealth != null && _damage > 0)
-            enemyHealth.TakeDamage(_damage);
+            enemyHealth.TakeDamage(_damage, (Vector2)transform.position, _centerNetId);
     }
 }
 

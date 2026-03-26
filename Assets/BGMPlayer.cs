@@ -1,3 +1,5 @@
+using System.Collections;
+using Mirror;
 using UnityEngine;
 
 /// <summary>
@@ -5,6 +7,7 @@ using UnityEngine;
 /// - 可选跨场景保留
 /// - 自动循环播放
 /// - 可在 Inspector 调整音量
+/// - 联机时：BGM 只在「本机有游戏窗口的进程」播放（Host/纯客户端/单机），纯服务器进程不播
 /// </summary>
 public class BGMPlayer : MonoBehaviour
 {
@@ -17,6 +20,13 @@ public class BGMPlayer : MonoBehaviour
     public bool dontDestroyOnLoad = true;
     [Tooltip("勾选后场景中仅保留一个 BGMPlayer，避免重复叠播。")]
     public bool singleton = true;
+
+    [Header("联机（Mirror）")]
+    [Tooltip("纯服务器（NetworkServer 开启且本机无 NetworkClient）不播放 BGM。每个客户端/Host 进程各自只听自己的 BGM，不会通过网络发给对方。")]
+    public bool muteOnDedicatedServer = true;
+
+    [Tooltip("将本物体挂到 MainCamera 下（仅当未勾选「跨场景保留」时使用；否则换场景可能随相机被销毁）。")]
+    public bool attachToMainCamera = false;
 
     AudioSource _audioSource;
     static BGMPlayer _instance;
@@ -46,10 +56,34 @@ public class BGMPlayer : MonoBehaviour
             DontDestroyOnLoad(gameObject);
     }
 
-    void Start()
+    IEnumerator Start()
     {
+        // 等一帧：Camera.main / NetworkManager 就绪
+        yield return null;
+
+        if (attachToMainCamera && !dontDestroyOnLoad && Camera.main != null)
+            transform.SetParent(Camera.main.transform, false);
+
+        if (muteOnDedicatedServer && IsDedicatedServerProcess())
+            yield break;
+
         if (playOnStart)
             Play();
+    }
+
+    void Update()
+    {
+        if (!muteOnDedicatedServer || _audioSource == null || !_audioSource.isPlaying)
+            return;
+        if (!IsDedicatedServerProcess())
+            return;
+        Stop();
+    }
+
+    /// <summary>本进程只有服务端、没有本地客户端（独立 Server 可执行文件等）。</summary>
+    static bool IsDedicatedServerProcess()
+    {
+        return NetworkServer.active && !NetworkClient.active;
     }
 
     void OnValidate()

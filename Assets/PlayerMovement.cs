@@ -49,6 +49,11 @@ public class PlayerMovement : MonoBehaviour
     public float remoteMoveInputSmooth = 18f;
     private Vector2 _remoteMoveInputSmoothed;
 
+    /// <summary>
+    /// 冲刺等技能在本地由 TargetRpc 驱动位移时，必须暂时屏蔽走路输入，否则 FixedUpdate 会覆盖位移。
+    /// </summary>
+    bool _dashSuppressMove;
+
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -63,6 +68,12 @@ public class PlayerMovement : MonoBehaviour
         _remoteLogUntilTime = Time.time + remoteLogDurationSeconds;
 
         _remoteMoveInputSmoothed = Vector2.zero;
+    }
+
+    /// <summary>由 PlayerSkills 冲刺 TargetRpc 调用：冲刺期间禁止走路速度覆盖位置。</summary>
+    public void SetDashSuppressMove(bool on)
+    {
+        _dashSuppressMove = on;
     }
 
     private void ApplyNetRolePhysicsEveryFrame()
@@ -215,6 +226,12 @@ public class PlayerMovement : MonoBehaviour
             rb.velocity = Vector2.zero;
             return;
         }
+        if (_dashSuppressMove)
+        {
+            rb.velocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            return;
+        }
         if (moveInput.sqrMagnitude < 0.001f)
             rb.velocity = Vector2.zero;
         else
@@ -230,6 +247,9 @@ public class PlayerMovement : MonoBehaviour
         {
             return;
         }
+
+        if (_dashSuppressMove)
+            return;
 
         // 地图边界：把位置限制在矩形内，像空气墙
         if (useMapBounds)

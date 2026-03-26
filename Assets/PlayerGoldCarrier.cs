@@ -331,7 +331,7 @@ public class PlayerGoldCarrier : NetworkBehaviour
         while (pickup != null && elapsed < pickupMagnetMaxDuration)
         {
             // 如果动画期间金块变成了“挂敌人携带”，立刻停止本次吸取视觉，避免假吸导致误解。
-            if (pickup.IsAttachedToEnemyCarrier)
+            if (pickup.IsEffectivelyCarriedForPickup)
             {
                 pickup.EndPickupAnimationLocal();
                 yield break;
@@ -396,9 +396,9 @@ public class PlayerGoldCarrier : NetworkBehaviour
             return;
         }
 
-        if (pickup.IsCarriedByEnemy)
+        if (pickup.IsEffectivelyCarriedForPickup)
         {
-            LogPickupCmd($"[CmdTryPickup FAIL] pickup carried by enemy netId={pickupNetId} carry={before}/{maxCarry}");
+            LogPickupCmd($"[CmdTryPickup FAIL] pickup still carried (sync or parent) netId={pickupNetId} carry={before}/{maxCarry} carriedSync={pickup.IsCarriedByEnemy} underEnemy={pickup.IsAttachedToEnemyCarrier}");
             return;
         }
         if (!pickup.CanBePickedDetailed(out bool timeOk, out bool animOk, out bool carriedOk, out float nowTime, out float spawnTime, out float readyAt))
@@ -471,6 +471,16 @@ public class PlayerGoldCarrier : NetworkBehaviour
             return;
 
         carryCount = Mathf.Max(0, carryCount - deposited);
+        RpcPlayMineDepositSfxShared(mine.transform.position);
+    }
+
+    [ClientRpc]
+    void RpcPlayMineDepositSfxShared(Vector3 mineWorldPos)
+    {
+        GoldMineController m = FindObjectOfType<GoldMineController>();
+        if (m == null)
+            return;
+        CombatSfxUtil.Play2D(m.mineDepositSfx, mineWorldPos, m.mineDepositSfxVolume);
     }
 
     void TryDropOneRequestToServer()
@@ -522,6 +532,43 @@ public class PlayerGoldCarrier : NetworkBehaviour
             Debug.Log($"[CmdTryDropGold] spawned droppedGold netId={droppedNi.netId}");
 
         carryCount = Mathf.Max(0, carryCount - 1);
+    }
+
+    /// <summary>
+    /// 玩家死亡时由服务器调用：把背包里所有金块掉在玩家原地，并清空背包。
+    /// </summary>
+    [Server]
+    public void ServerDropAllCarriedGoldOnDeath(Vector2? overrideSpawnPos = null)
+    {
+        if (!NetworkServer.active)
+            return;
+
+        int count = Mathf.Max(0, carryCount);
+        if (count <= 0)
+            return;
+
+        EnsureDropPrefabBound();
+        if (goldPickupPrefab == null)
+            return;
+
+        Vector2 spawnPos = overrideSpawnPos ?? (Vector2)transform.position;
+
+        // 生成一堆金块（amount=count），减少网络对象数量
+        GameObject go = Instantiate(goldPickupPrefab, spawnPos, Quaternion.identity);
+        GoldPickup pickup = go.GetComponent<GoldPickup>();
+        if (pickup != null)
+        {
+            pickup.amount = count;
+            pickup.autoDestroyAfter = 0f;
+            pickup.pickupDelay = 0f;
+            pickup.ServerResetSpawnTimeNow();
+            pickup.SetCarriedByEnemy(false);
+        }
+
+        EnsureNetworkedGoldPickup(go);
+        NetworkServer.Spawn(go);
+
+        carryCount = 0;
     }
 
     void EnsureNetworkedGoldPickup(GameObject go)

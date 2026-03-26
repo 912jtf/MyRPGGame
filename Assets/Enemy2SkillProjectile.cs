@@ -185,7 +185,7 @@ public class Enemy2SkillProjectile : MonoBehaviour
             return;
 
         PlayerHealth ph = other.GetComponent<PlayerHealth>();
-        if (ph != null && damage > 0)
+        if (ph != null && damage > 0 && !ph.IsDead)
         {
             ph.TakeDamage(damage);
             _hasDealtDamage = true;
@@ -248,7 +248,7 @@ public class Enemy2SkillProjectile : MonoBehaviour
             if (ph == null)
                 ph = col.GetComponentInParent<PlayerHealth>();
 
-            if (ph != null && damage > 0)
+            if (ph != null && damage > 0 && !ph.IsDead)
             {
                 ph.TakeDamage(damage);
                 _hasDealtDamage = true;

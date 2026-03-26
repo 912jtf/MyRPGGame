@@ -143,6 +143,8 @@ public class Enemy : MonoBehaviour
     [Header("Facing")]
     [Tooltip("用于修正精灵初始朝向是否反了。勾上后，所有 flipX 逻辑会反向。")]
     public bool invertFacing = false;
+    [Tooltip("仅客户端：翻面时水平方向死区（世界单位），过滤 NetworkTransform 插值抖动，减轻左右抽搐。")]
+    [Min(0f)] public float clientFacingHorizontalDeadZone = 0.028f;
 
     [Header("受击反应")]
     [Tooltip("每次受击后向远离攻击源方向击退的距离（世界单位）")]
@@ -221,6 +223,11 @@ public class Enemy : MonoBehaviour
     float _loseAggroDeadline = -1f;
     bool HasCarriedGold => _carriedGoldPickup != null && _carriedGoldPickup.amount > 0;
     bool IsFleeingFromMine => fleeAfterSteal && Time.time < _fleeUntilTime;
+
+    // Remote-client only: when server steals gold, we also spawn a purely local visual on the enemy
+    // to avoid relying on networked GoldPickup parenting/sorting replication.
+    GameObject _clientCarriedGoldVisual;
+    SpriteRenderer _clientCarriedGoldSpriteRenderer;
 
     void Awake()
     {
@@ -414,7 +421,8 @@ public class Enemy : MonoBehaviour
         if (_clientFacingPrevPosInit)
         {
             Vector3 delta = curPos - _clientFacingPrevPos;
-            if (delta.sqrMagnitude > 0.0001f)
+            // 仅当水平位移明显时才按位移翻面；否则插值噪声会让 flipX 每帧翻转 → 左右抽搐。
+            if (delta.sqrMagnitude > 0.0001f && Mathf.Abs(delta.x) > clientFacingHorizontalDeadZone)
             {
                 bool newFlipMove = (delta.x < 0f) ^ invertFacing;
                 if (spriteRenderer.flipX != newFlipMove)
@@ -448,16 +456,19 @@ public class Enemy : MonoBehaviour
         Vector3 myPos = transform.position;
         float bestSqr = float.PositiveInfinity;
         Vector3 bestPos = myPos;
+        int bestId = int.MaxValue;
 
         for (int i = 0; i < s_cachedClientPlayers.Length; i++)
         {
             var tr = s_cachedClientPlayers[i];
             if (tr == null) continue;
             float d = (tr.position - myPos).sqrMagnitude;
-            if (d < bestSqr)
+            int id = tr.GetInstanceID();
+            if (d < bestSqr || (Mathf.Abs(d - bestSqr) < 0.01f && id < bestId))
             {
                 bestSqr = d;
                 bestPos = tr.position;
+                bestId = id;
             }
         }
 
@@ -893,6 +904,14 @@ public class Enemy : MonoBehaviour
         }
 
         CombatSfxUtil.Play2D(skillCastSfx, spawnPos, skillCastSfxVolume);
+
+        // 弹丸 prefab 虽含 NetworkIdentity / NetworkTransform，但必须 Spawn 才会下发到远端 Client；
+        // 否则只在服务器存在，Host 能看见、纯 Client 看不见（与金块问题同理）。
+        if (NetworkServer.active)
+        {
+            EnsureNetworkedGoldPickup(go);
+            NetworkServer.Spawn(go);
+        }
     }
 
     void UpdateCooldown()
@@ -1017,18 +1036,8 @@ public class Enemy : MonoBehaviour
 
     bool HasAnimatorBool(string paramName) => animator != null && HasAnimatorBool(animator, paramName);
 
-    // 索敌 Trigger：需要将其中一个 Collider2D 勾选 IsTrigger
-    void OnTriggerEnter2D(Collider2D other)
-    {
-        if (other.CompareTag("Player"))
-            targetPlayer = other.transform;
-    }
-
-    void OnTriggerExit2D(Collider2D other)
-    {
-        if (targetPlayer != null && other.transform == targetPlayer)
-            targetPlayer = null;
-    }
+    // 索敌不再用 Trigger 写入 targetPlayer：两人同时在范围内时 Enter/Exit 会反复覆盖或清空，导致抽搐。
+    // 目标只由 UpdateTargetSelection() 维护：有目标时保持到脱战；无目标时在 playerAggroRange 内选最近（距离相等时稳定 tie-break）。
 
     // ===== Animation Event =====
 
@@ -1056,7 +1065,8 @@ public class Enemy : MonoBehaviour
         foreach (Collider2D col in hitPlayers)
         {
             PlayerHealth ph = col.GetComponent<PlayerHealth>();
-            if (ph != null) ph.TakeDamage(attackDamage);
+            if (ph != null && !ph.IsDead)
+                ph.TakeDamage(attackDamage);
         }
     }
 
@@ -1448,6 +1458,14 @@ public class Enemy : MonoBehaviour
                 return;
             }
 
+            PlayerHealth tph = targetPlayer.GetComponent<PlayerHealth>();
+            if (tph != null && tph.IsDead)
+            {
+                targetPlayer = null;
+                _loseAggroDeadline = -1f;
+                return;
+            }
+
             float dist = Vector2.Distance(transform.position, targetPlayer.position);
             if (dist > loseAggroRange)
             {
@@ -1477,19 +1495,28 @@ public class Enemy : MonoBehaviour
         if (players == null || players.Length == 0)
             return;
 
-        float bestSqr = playerAggroRange * playerAggroRange;
+        float rangeSqr = playerAggroRange * playerAggroRange;
+        float bestSqr = float.PositiveInfinity;
         Transform best = null;
+        int bestId = int.MaxValue;
         Vector2 self = transform.position;
         foreach (GameObject player in players)
         {
             if (player == null) continue;
+            PlayerHealth phSel = player.GetComponent<PlayerHealth>();
+            if (phSel != null && phSel.IsDead)
+                continue;
             if (loseSightWhenPlayerOnHighGround && IsPlayerOnHighGround(player.transform))
                 continue;
             float sqr = ((Vector2)player.transform.position - self).sqrMagnitude;
-            if (sqr <= bestSqr)
+            if (sqr > rangeSqr)
+                continue;
+            int id = player.GetInstanceID();
+            if (sqr < bestSqr || (Mathf.Abs(sqr - bestSqr) < 0.01f && id < bestId))
             {
                 bestSqr = sqr;
                 best = player.transform;
+                bestId = id;
             }
         }
 
@@ -1694,6 +1721,79 @@ public class Enemy : MonoBehaviour
         return stole;
     }
 
+    /// <summary>
+    /// Only called via PlayerHealth ClientRpc on remote clients (Host/Server suppressed).
+    /// 用于显示“携带金块”视觉：不依赖网络生成/排序同步。
+    /// </summary>
+    public void SetClientCarriedGoldVisual(int amount, bool carried)
+    {
+        // Host 模式下，这个 Enemy 既是 server 又是 client：
+        // 网络生成的 GoldPickup 通常已经能被主机看到，这里避免重复生成。
+        if (NetworkServer.active)
+            return;
+
+        if (!carried)
+        {
+            if (_clientCarriedGoldVisual != null)
+                Destroy(_clientCarriedGoldVisual);
+            _clientCarriedGoldVisual = null;
+            _clientCarriedGoldSpriteRenderer = null;
+            return;
+        }
+
+        // 如果场景里已经存在“被敌人携带的网络金块”（例如排序修复后已可见），就不再叠加本地视觉。
+        // （仅用距离做近似判断，减少误伤。）
+        float carryVisualMinDistSqr = 0.01f; // 约 0.1m
+        GoldPickup[] pickups = FindObjectsOfType<GoldPickup>(true);
+        if (pickups != null && pickups.Length > 0)
+        {
+            for (int i = 0; i < pickups.Length; i++)
+            {
+                var p = pickups[i];
+                if (p == null) continue;
+                if (!p.IsCarriedByEnemy) continue;
+                float d2 = ((Vector2)p.transform.position - (Vector2)transform.position).sqrMagnitude;
+                if (d2 <= carryVisualMinDistSqr)
+                    return;
+            }
+        }
+
+        Transform attach = carriedGoldAttachPoint != null ? carriedGoldAttachPoint : transform;
+        if (_clientCarriedGoldVisual == null)
+        {
+            _clientCarriedGoldVisual = new GameObject("EnemyCarryGoldVisual_Local");
+            _clientCarriedGoldSpriteRenderer = _clientCarriedGoldVisual.AddComponent<SpriteRenderer>();
+        }
+
+        _clientCarriedGoldVisual.transform.SetParent(attach, worldPositionStays: false);
+        _clientCarriedGoldVisual.transform.localPosition = carriedGoldLocalOffset;
+        _clientCarriedGoldVisual.transform.localRotation = Quaternion.identity;
+
+        // 选择 sprite：优先取 stolenGoldPickupPrefab 的 SpriteRenderer；否则用 fallback sprite。
+        Sprite spriteToUse = null;
+        if (stolenGoldPickupPrefab != null)
+        {
+            SpriteRenderer sr = stolenGoldPickupPrefab.GetComponentInChildren<SpriteRenderer>(true);
+            if (sr != null)
+                spriteToUse = sr.sprite;
+        }
+        if (spriteToUse == null)
+            spriteToUse = stolenGoldFallbackSprite;
+        if (_clientCarriedGoldSpriteRenderer != null && spriteToUse != null)
+            _clientCarriedGoldSpriteRenderer.sprite = spriteToUse;
+
+        // 保持携带金块在“敌人前景”显示
+        if (_clientCarriedGoldSpriteRenderer != null && spriteRenderer != null)
+        {
+            _clientCarriedGoldSpriteRenderer.sortingLayerID = spriteRenderer.sortingLayerID;
+            _clientCarriedGoldSpriteRenderer.sortingOrder = spriteRenderer.sortingOrder + 1;
+        }
+
+        // 统一携带金块世界尺寸（抵消父物体缩放）
+        if (_clientCarriedGoldVisual != null)
+            NormalizeCarriedGoldWorldScale(_clientCarriedGoldVisual.transform, attach);
+    }
+
     void GiveCarriedGoldPickup(int amount)
     {
         if (!NetworkServer.active)
@@ -1705,6 +1805,9 @@ public class Enemy : MonoBehaviour
         if (_carriedGoldPickup != null)
         {
             _carriedGoldPickup.amount += amount;
+            NetworkIdentity ni = GetComponent<NetworkIdentity>();
+            if (ni != null)
+                PlayerHealth.ServerBroadcastEnemyCarryGoldVisual((uint)ni.netId, _carriedGoldPickup.amount, true);
             return;
         }
 
@@ -1743,25 +1846,63 @@ public class Enemy : MonoBehaviour
 
         _carriedGoldPickup = pickup;
 
+        NetworkIdentity enemyNi = GetComponent<NetworkIdentity>();
+        if (enemyNi != null)
+            PlayerHealth.ServerBroadcastEnemyCarryGoldVisual((uint)enemyNi.netId, _carriedGoldPickup.amount, true);
+
         if (debugMineAI)
             Debug.Log($"[{name}] GiveCarriedGoldPickup amount={amount} pickup={go.name}");
     }
 
     public void DropCarriedGoldOnDeath()
     {
+        if (!NetworkServer.active)
+            return;
         if (_carriedGoldPickup == null)
             return;
 
         GoldPickup pickup = _carriedGoldPickup;
+        int amount = Mathf.Max(1, pickup.amount);
+        Vector3 worldPos = pickup.transform.position;
         _carriedGoldPickup = null;
+
+        NetworkIdentity enemyNi = GetComponent<NetworkIdentity>();
+        if (enemyNi != null)
+            PlayerHealth.ServerBroadcastEnemyCarryGoldVisual((uint)enemyNi.netId, 0, false);
+
+        // 优先：用已注册到 NetworkManager 的金块预制体重生一份「根物体」。
+        // 继续沿用「挂在野怪下的那份」在纯 Client 上常无法正确 Spawn/观察，Host 本机却正常。
+        if (stolenGoldPickupPrefab != null)
+        {
+            NetworkServer.Destroy(pickup.gameObject);
+
+            GameObject go = Instantiate(stolenGoldPickupPrefab, worldPos, Quaternion.identity);
+            GoldPickup fresh = go.GetComponent<GoldPickup>();
+            if (fresh == null)
+                fresh = go.AddComponent<GoldPickup>();
+            fresh.amount = amount;
+            fresh.autoDestroyAfter = 0f;
+            fresh.pickupDelay = 0f;
+            EnsurePickupTrigger(go);
+            EnsureNetworkedGoldPickup(go);
+            NetworkServer.Spawn(go);
+            fresh.ServerResetSpawnTimeNow();
+            fresh.SetCarriedByEnemy(false);
+            return;
+        }
 
         Transform tr = pickup.transform;
         tr.SetParent(null, worldPositionStays: true);
 
-        // 死亡掉落后：恢复为可拾取地面金块，并保持常驻（不自动消失）。
         pickup.autoDestroyAfter = 0f;
         pickup.pickupDelay = 0f;
+        pickup.ServerResetSpawnTimeNow();
         pickup.SetCarriedByEnemy(false);
+
+        NetworkIdentity goldNi = pickup.GetComponent<NetworkIdentity>();
+        EnemyHealth eh = GetComponent<EnemyHealth>();
+        if (goldNi != null && eh != null)
+            eh.RpcDetachCarriedGoldToWorld(goldNi.netId);
     }
 
     void SyncCarriedGoldRenderOrder(GameObject goldObj)

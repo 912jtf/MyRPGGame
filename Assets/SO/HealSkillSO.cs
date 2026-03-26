@@ -24,7 +24,7 @@ public class HealSkillSO : SkillSO
         if (owner == null) return;
 
         Vector3 castPos = owner.LastCastWorldPosition;
-        CombatSfxUtil.Play2D(castSfx, castPos, castSfxVolume);
+        owner.ServerNotifySkillCastSfxLocal(castPos);
 
         PlayerHealth playerHealth = owner.GetComponent<PlayerHealth>();
         if (playerHealth != null && healAmount > 0)

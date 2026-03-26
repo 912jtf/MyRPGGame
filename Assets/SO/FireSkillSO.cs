@@ -35,7 +35,7 @@ public class FireSkillSO : SkillSO
 
         if (fireCount <= 0) fireCount = 3;
 
-        CombatSfxUtil.Play2D(castSfx, castPos, castSfxVolume);
+        owner.ServerNotifySkillCastSfxLocal(castPos);
 
         float deltaAngle = 360f / fireCount;
 

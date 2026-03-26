@@ -101,13 +101,16 @@ public class PlayerHealth : NetworkBehaviour
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
     private bool _isDead;
+    bool _deathGameplayApplied;
     GameObject _gameOverOverlay;
-    [SyncVar(hook = nameof(OnMatchEndedNetChanged))]
-    bool _matchEnded;
+    // 必须先于 _matchEnded：Mirror 按字段顺序反序列化；若 hook 先于 _matchIsSuccess 写入，
+    // 纯 Client 会在 OnMatchEndedClient 里读到 false → 误显示 Game Over，而 Host 因 EndMatchServer 末尾直接刷新而不中招。
     [SyncVar]
     float _matchRemainingTime;
     [SyncVar]
     bool _matchIsSuccess;
+    [SyncVar(hook = nameof(OnMatchEndedNetChanged))]
+    bool _matchEnded;
     TextMeshProUGUI _resultTitleText;
     Vector3 _resultTitleBaseScale;
     Coroutine _titlePulseRoutine;
@@ -270,19 +273,7 @@ public class PlayerHealth : NetworkBehaviour
         if (currentHealth < 0)
             currentHealth = 0;
 
-        // 受击闪红
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = hurtColor;
-            CancelInvoke(nameof(ResetColor));
-            Invoke(nameof(ResetColor), hurtFlashTime);
-        }
-
         UpdateHealthUI();
-
-        NetworkIdentity ni = GetComponent<NetworkIdentity>();
-        if (ni == null || ni.isLocalPlayer)
-            CombatSfxUtil.Play2D(hurtSfx, transform.position, hurtSfxVolume);
 
         if (currentHealth <= 0)
         {
@@ -295,8 +286,9 @@ public class PlayerHealth : NetworkBehaviour
         // 只有 UI/表现需要在客户端同步；服务器逻辑仍由 TakeDamage/Die 处理
         UpdateHealthUI();
 
-        // 客户端受击表现：当血量下降时，触发红色闪烁
-        if (!isServer && newValue < oldValue - 0.0001f)
+        // 受击闪红：任意客户端实例都显示（含 Host 看对方玩家）。
+        // 受伤音效：仅“本机操控的玩家”播放，避免对方窗口也听到你的挨打声。
+        if (NetworkClient.active && newValue < oldValue - 0.0001f)
         {
             if (spriteRenderer != null)
             {
@@ -304,6 +296,8 @@ public class PlayerHealth : NetworkBehaviour
                 CancelInvoke(nameof(ResetColor));
                 Invoke(nameof(ResetColor), hurtFlashTime);
             }
+            if (isLocalPlayer)
+                CombatSfxUtil.Play2D(hurtSfx, transform.position, hurtSfxVolume);
         }
 
         // 服务器上死亡/胜负判定由 Die() 统一处理，避免 hook 抢先把 _isDead 置为 true，
@@ -323,6 +317,7 @@ public class PlayerHealth : NetworkBehaviour
                 spriteRenderer.sprite = deadSprite;
                 spriteRenderer.color = Color.white;
             }
+            ApplyDeathGameplayLock();
         }
     }
 
@@ -387,7 +382,58 @@ public class PlayerHealth : NetworkBehaviour
         // 胜负判定：只有“所有玩家都死亡”才失败
         if (isServer)
         {
+            // 死亡掉落：把身上携带的金块全部掉在原地（只在服务器生成并同步）
+            PlayerGoldCarrier gold = GetComponent<PlayerGoldCarrier>();
+            if (gold != null)
+                gold.ServerDropAllCarriedGoldOnDeath((Vector2)transform.position);
+
             TryEndMatchIfAllPlayersDead();
+        }
+
+        ApplyDeathGameplayLock();
+    }
+
+    /// <summary>
+    /// 死亡后：不能移动/攻击/技能/捡金与还金；关闭碰撞与刚体模拟（服务端与各自客户端各执行一次，因 Collider 不同步）。
+    /// </summary>
+    void ApplyDeathGameplayLock()
+    {
+        if (_deathGameplayApplied)
+            return;
+        _deathGameplayApplied = true;
+
+        PlayerMovement move = GetComponent<PlayerMovement>();
+        if (move != null)
+            move.enabled = false;
+
+        PlayerAttack attack = GetComponent<PlayerAttack>();
+        if (attack != null)
+            attack.enabled = false;
+
+        PlayerSkills skills = GetComponent<PlayerSkills>();
+        if (skills != null)
+            skills.enabled = false;
+
+        PlayerGoldCarrier gold = GetComponent<PlayerGoldCarrier>();
+        if (gold != null)
+            gold.enabled = false;
+
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.velocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            rb.simulated = false;
+        }
+
+        Collider2D[] cols = GetComponentsInChildren<Collider2D>(true);
+        if (cols != null)
+        {
+            for (int i = 0; i < cols.Length; i++)
+            {
+                if (cols[i] != null)
+                    cols[i].enabled = false;
+            }
         }
     }
 
@@ -629,6 +675,80 @@ public class PlayerHealth : NetworkBehaviour
 
         if (goldMineController != null)
             goldMineController.SetGoldNetwork(current, max);
+    }
+
+    /// <summary>野怪偷矿成功：所有客户端（含 Host）播放金矿上的 mineHitByEnemySfx。金矿无 NetworkIdentity，借玩家对象发 Rpc。</summary>
+    public static void ServerBroadcastMineStealSfx(Vector3 mineWorldPos)
+    {
+        if (!NetworkServer.active)
+            return;
+
+        PlayerHealth relay = s_serverMatchController;
+        if (relay == null)
+        {
+            PlayerHealth[] all = FindObjectsOfType<PlayerHealth>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null)
+                {
+                    relay = all[i];
+                    break;
+                }
+            }
+        }
+        if (relay == null)
+            return;
+
+        relay.RpcBroadcastMineStealSfxShared(mineWorldPos);
+    }
+
+    [ClientRpc]
+    void RpcBroadcastMineStealSfxShared(Vector3 mineWorldPos)
+    {
+        GoldMineController m = goldMineController != null ? goldMineController : FindObjectOfType<GoldMineController>();
+        if (m == null)
+            return;
+        CombatSfxUtil.Play2D(m.mineHitByEnemySfx, mineWorldPos, m.mineHitByEnemySfxVolume);
+    }
+
+    /// <summary>
+    /// 敌人偷矿后：在“所有客户端”做本地可视化（避免远端 client 看不到网络生成的携带金块渲染）。
+    /// Host 模式下会在 Enemy 内部用 `NetworkServer.active` 抑制重复生成。
+    /// </summary>
+    public static void ServerBroadcastEnemyCarryGoldVisual(uint enemyNetId, int amount, bool carried)
+    {
+        if (!NetworkServer.active)
+            return;
+
+        PlayerHealth relay = s_serverMatchController;
+        if (relay == null)
+        {
+            PlayerHealth[] all = FindObjectsOfType<PlayerHealth>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null)
+                {
+                    relay = all[i];
+                    break;
+                }
+            }
+        }
+
+        if (relay == null)
+            return;
+
+        relay.RpcBroadcastEnemyCarryGoldVisualShared(enemyNetId, amount, carried);
+    }
+
+    [ClientRpc]
+    void RpcBroadcastEnemyCarryGoldVisualShared(uint enemyNetId, int amount, bool carried)
+    {
+        if (!NetworkClient.spawned.TryGetValue(enemyNetId, out NetworkIdentity ni) || ni == null)
+            return;
+        Enemy e = ni.GetComponent<Enemy>();
+        if (e == null)
+            return;
+        e.SetClientCarriedGoldVisual(amount, carried);
     }
 
     void EndMatchServer(bool isSuccess)
