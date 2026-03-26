@@ -18,20 +18,14 @@ namespace Mirror
         {
             None,
             SingleHost,
-            DualAuto,            // user clicked "Dual Start": try client first, then auto-host if timeout
-            DualHostWaiting,
-            DualClientConnecting,
+            DualHostWaiting,      // created room, waiting for 2nd player
+            DualClientConnecting, // joining room, waiting for 2nd player
             DualInGame
         }
 
         StartMode _mode;
-        float _dualStartClickedTime;
 
         [Header("Easeplan HUD")]
-        [Tooltip("双人开始：先尝试作为 Client 连接；若超时未连上则自动开 Host 等待对方。")]
-        public bool dualAutoHostIfConnectFails = true;
-        [Min(0.2f)]
-        public float dualConnectTimeoutSeconds = 2.0f;
         [Tooltip("双人开始：本地玩家在对方未加入前禁用操作脚本。")]
         public bool lockLocalPlayerControlUntilBothReady = true;
 
@@ -91,14 +85,25 @@ namespace Mirror
 
                 if (GUILayout.Button("单人开始"))
                 {
+                    PlayerPrefs.SetInt("Easeplan.RequiredPlayers", 1);
+                    PlayerPrefs.Save();
                     _mode = StartMode.SingleHost;
                     manager.StartHost();
                 }
 
-                if (GUILayout.Button("双人开始"))
+                if (GUILayout.Button("创建双人房间（Host）"))
                 {
-                    _mode = StartMode.DualAuto;
-                    _dualStartClickedTime = Time.realtimeSinceStartup;
+                    PlayerPrefs.SetInt("Easeplan.RequiredPlayers", 2);
+                    PlayerPrefs.Save();
+                    _mode = StartMode.DualHostWaiting;
+                    manager.StartHost();
+                }
+
+                if (GUILayout.Button("加入双人（Client）"))
+                {
+                    PlayerPrefs.SetInt("Easeplan.RequiredPlayers", 2);
+                    PlayerPrefs.Save();
+                    _mode = StartMode.DualClientConnecting;
                     manager.StartClient();
                 }
             }
@@ -106,20 +111,6 @@ namespace Mirror
             {
                 // Connecting
                 GUILayout.Label($"连接中: {manager.networkAddress}  via {Transport.active}");
-
-                // 双人开始：连接超时则自动开 Host
-                if (_mode == StartMode.DualAuto && dualAutoHostIfConnectFails)
-                {
-                    float elapsed = Time.realtimeSinceStartup - _dualStartClickedTime;
-                    float remain = Mathf.Max(0f, dualConnectTimeoutSeconds - elapsed);
-                    GUILayout.Label($"双人开始：正在尝试加入... ({remain:F1}s)");
-                    if (elapsed >= dualConnectTimeoutSeconds && !NetworkClient.isConnected)
-                    {
-                        manager.StopClient();
-                        _mode = StartMode.DualHostWaiting;
-                        manager.StartHost();
-                    }
-                }
 
                 if (GUILayout.Button("取消"))
                 {
@@ -131,15 +122,6 @@ namespace Mirror
 
         void StatusLabels()
         {
-            // Update mode transitions
-            if (_mode == StartMode.DualAuto)
-            {
-                if (NetworkClient.isConnected && !NetworkServer.active)
-                    _mode = StartMode.DualClientConnecting;
-                else if (NetworkServer.active && NetworkClient.active)
-                    _mode = StartMode.DualHostWaiting;
-            }
-
             if ((_mode == StartMode.DualHostWaiting || _mode == StartMode.DualClientConnecting) && BothPlayersPresent())
                 _mode = StartMode.DualInGame;
 
@@ -163,7 +145,7 @@ namespace Mirror
                 if (_mode == StartMode.DualHostWaiting)
                 {
                     int connected = NetworkServer.connections != null ? NetworkServer.connections.Count : 0;
-                    GUILayout.Label($"双人开始：等待对方加入... ({connected}/2)");
+                    GUILayout.Label($"双人：等待对方加入... ({connected}/2)");
                     if (BothPlayersPresent())
                         GUILayout.Label("对方已准备好，正在开始游戏...");
                 }
@@ -179,7 +161,7 @@ namespace Mirror
                 GUILayout.Label($"<b>Client</b>: connected to {manager.networkAddress} via {Transport.active}");
                 if (_mode == StartMode.DualClientConnecting)
                 {
-                    GUILayout.Label("双人开始：已连接，等待对方准备...");
+                    GUILayout.Label("双人：已连接，等待对方进入...");
                     if (BothPlayersPresent())
                         GUILayout.Label("对方已准备好，正在开始游戏...");
                 }

@@ -108,6 +108,12 @@ public class Enemy2SkillProjectile : MonoBehaviour
         if (!NetworkServer.active)
             return;
 
+        if (PlayerHealth.MatchEndedGlobal)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         // 如果没有刚体，就用 transform 移动保证效果可用
         // 当动画最后爆炸帧触发时，我们不瞬移，而是排队等待飞行到目的地附近后再真正开启伤害
         if (_finalDamageQueued && _hasTargetDestination && !_arrived)

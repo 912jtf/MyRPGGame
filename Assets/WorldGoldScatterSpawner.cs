@@ -46,40 +46,49 @@ public class WorldGoldScatterSpawner : MonoBehaviour
 
     void Start()
     {
-        if (_spawnedOnce)
-            return;
-        if (!spawnOnStart)
+        // 联机模式下开局刷金由 PlayerHealth 在“双方就绪 -> MatchStarted”时统一触发，
+        // 避免 Host/Client 不同步、重开不刷、或客户端出现幽灵金块等问题。
+        // 注意：在“点加入/点开房之前”，NetworkClient.active 仍为 false，但场景里已经有 NetworkManager，
+        // 若此时刷一遍离线金块，会导致 Client 连接后又收到服务器刷的一遍 -> 出现两份。
+        if (FindObjectOfType<NetworkManager>() != null)
             return;
 
-        // NetworkServer.active 可能在 Start() 执行时尚未变为 true（尤其是 Host）。
-        // 为避免“跳过后永远不刷”的问题，这里最多等待 2 秒。
-        StartCoroutine(CoWaitAndSpawn());
+        if (_spawnedOnce || !spawnOnStart)
+            return;
+
+        SpawnWorldGold();
+        _spawnedOnce = true;
     }
 
-    System.Collections.IEnumerator CoWaitAndSpawn()
+    /// <summary>
+    /// 仅服务器调用：清理本局残留金块并重新刷一批（用于联机开局/重开）。
+    /// </summary>
+    [Server]
+    public void ServerResetAndRespawnWorldGold()
     {
-        // Host 启动时 NetworkServer.active 可能有延迟，这里给更长兜底。
-        float timeout = 10f;
-        while (timeout > 0f && !NetworkServer.active)
+        if (!NetworkServer.active)
+            return;
+
+        // 清理：只清理“地面金块”，不动被敌人携带/正在吸附动画中的金块
+        GoldPickup[] all = FindObjectsOfType<GoldPickup>(true);
+        if (all != null)
         {
-            timeout -= Time.unscaledDeltaTime;
-            yield return null;
+            for (int i = 0; i < all.Length; i++)
+            {
+                GoldPickup gp = all[i];
+                if (gp == null) continue;
+                if (gp.IsCarriedByEnemy || gp.IsAttachedToEnemyCarrier) continue;
+                NetworkIdentity ni = gp.GetComponent<NetworkIdentity>();
+                if (ni != null && NetworkServer.spawned.ContainsKey(ni.netId))
+                    NetworkServer.Destroy(gp.gameObject);
+                else
+                    Destroy(gp.gameObject);
+            }
         }
 
-        if (NetworkServer.active)
-        {
-            if (_spawnedOnce)
-                yield break;
-            if (debugSpawnLogs)
-                Debug.Log($"[WorldGoldScatterSpawner] server active, start SpawnWorldGold. time={Time.time:F2}");
-            SpawnWorldGold();
-            _spawnedOnce = true;
-        }
-        else
-        {
-            if (debugSpawnLogs)
-                Debug.LogWarning($"[WorldGoldScatterSpawner] server not active after timeout, skip spawn. time={Time.time:F2}");
-        }
+        // 重新生成
+        SpawnWorldGold();
+        _spawnedOnce = true;
     }
 
     /// <summary>生成数量 = maxGold - initialGold。</summary>

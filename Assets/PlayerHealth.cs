@@ -18,6 +18,12 @@ public class PlayerHealth : NetworkBehaviour
     static float s_cachedPlayersUntil;
     static float s_cachedPlayersRefreshInterval = 1f;
 
+    // ===== Round State (shared, non-authoritative convenience) =====
+    // 目的：让 Enemy / Projectile 等非 NetworkBehaviour 脚本也能快速判断“对局是否已开始/是否已结算”，
+    // 从而在胜负出现时立刻冻结战斗与交互，避免继续攻击/偷矿/飞行结算。
+    public static bool MatchStartedGlobal { get; private set; }
+    public static bool MatchEndedGlobal { get; private set; }
+
     [Header("生命设置")]
     public float maxHealth = 3f;
 
@@ -109,6 +115,8 @@ public class PlayerHealth : NetworkBehaviour
     float _matchRemainingTime;
     [SyncVar]
     bool _matchIsSuccess;
+    [SyncVar(hook = nameof(OnMatchStartedNetChanged))]
+    bool _matchStarted;
     [SyncVar(hook = nameof(OnMatchEndedNetChanged))]
     bool _matchEnded;
     TextMeshProUGUI _resultTitleText;
@@ -184,12 +192,19 @@ public class PlayerHealth : NetworkBehaviour
         }
 
         UpdateHealthUI();
+
+        // local convenience flags (reset on scene load)
+        MatchStartedGlobal = false;
+        MatchEndedGlobal = false;
     }
 
     private void OnDestroy()
     {
         if (isServer && goldMineController != null)
             goldMineController.GoldChanged -= OnMineGoldChanged;
+
+        if (NetworkClient.active)
+            NetworkClient.OnDisconnectedEvent -= OnClientDisconnected;
     }
 
     public override void OnStartServer()
@@ -198,6 +213,7 @@ public class PlayerHealth : NetworkBehaviour
         _matchRemainingTime = Mathf.Max(1f, matchDurationSeconds);
         _matchEnded = false;
         _matchIsSuccess = false;
+        _matchStarted = false;
 
         // 只让第一个进入 OnStartServer 的玩家对象作为“服务端倒计时控制器”
         if (s_serverMatchController == null)
@@ -223,11 +239,34 @@ public class PlayerHealth : NetworkBehaviour
     {
         base.OnStartClient();
 
+        // 断线/房主重开：客户端需要立刻回到“模式选择界面”，并清理结算遮罩，避免卡在胜负页面。
+        NetworkClient.OnDisconnectedEvent -= OnClientDisconnected;
+        NetworkClient.OnDisconnectedEvent += OnClientDisconnected;
+
         if (showCountdownText && isLocalPlayer)
         {
             EnsureCountdownText();
             RefreshCountdownText();
         }
+    }
+
+    void OnClientDisconnected()
+    {
+        // 客户端被房主 StopHost 踢下线时：清理 UI + 重置对局状态
+        MatchStartedGlobal = false;
+        MatchEndedGlobal = false;
+
+        if (_gameOverOverlay != null)
+        {
+            Destroy(_gameOverOverlay);
+            _gameOverOverlay = null;
+            _resultTitleText = null;
+        }
+
+        // 重载当前场景，回到启动 HUD
+        Time.timeScale = 1f;
+        Scene current = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(current.buildIndex);
     }
 
     private void Update()
@@ -240,6 +279,30 @@ public class PlayerHealth : NetworkBehaviour
             // 仅控制器实例负责倒计时，并同步到所有玩家实例，保证客户端倒计时一致
             if (this == s_serverMatchController)
             {
+                // 对局开始门槛：
+                // - 单人：点击“单人开始”后，requiredPlayers=1，立刻开局
+                // - 双人：点击“创建双人房间/加入双人”，requiredPlayers=2，等两人都进来再开局
+                int requiredPlayers = Mathf.Clamp(PlayerPrefs.GetInt("Easeplan.RequiredPlayers", 1), 1, 8);
+                int connected = NetworkServer.connections != null ? NetworkServer.connections.Count : 0;
+                bool shouldStart = connected >= requiredPlayers;
+
+                if (!_matchStarted)
+                {
+                    if (!shouldStart)
+                    {
+                        // 未开始前不倒计时，也不触发胜负
+                        return;
+                    }
+
+                    // 首次满足开局条件：标记开始，并做“开局刷新”（刷金/清理残留）
+                    _matchStarted = true;
+                    MatchStartedGlobal = true;
+
+                    WorldGoldScatterSpawner spawner = FindObjectOfType<WorldGoldScatterSpawner>();
+                    if (spawner != null)
+                        spawner.ServerResetAndRespawnWorldGold();
+                }
+
                 _matchRemainingTime -= Time.deltaTime;
 
                 if (_matchRemainingTime <= 0f)
@@ -259,6 +322,12 @@ public class PlayerHealth : NetworkBehaviour
 
         if (showCountdownText && isLocalPlayer)
             RefreshCountdownText();
+    }
+
+    void OnMatchStartedNetChanged(bool oldValue, bool newValue)
+    {
+        if (newValue)
+            MatchStartedGlobal = true;
     }
 
     public void TakeDamage(float damage)
@@ -325,6 +394,8 @@ public class PlayerHealth : NetworkBehaviour
     {
         if (!newValue)
             return;
+
+        MatchEndedGlobal = true;
 
         // 同步到每个客户端后，在“本地玩家实例”上禁用操作并弹出结算 UI
         OnMatchEndedClient();
@@ -805,6 +876,7 @@ public class PlayerHealth : NetworkBehaviour
             return;
 
         s_serverMatchEndedGuard = true;
+        MatchEndedGlobal = true;
 
         // 将胜负结果同步给所有玩家对象，保证每个客户端的“本地玩家实例”都会触发胜负 UI。
         PlayerHealth[] all = GetServerPlayersCache();
@@ -814,6 +886,7 @@ public class PlayerHealth : NetworkBehaviour
             all[i]._matchEnded = true;
             all[i]._matchIsSuccess = isSuccess;
             all[i]._matchRemainingTime = 0f;
+            all[i]._matchStarted = false;
         }
 
         // 服务器当前对象也可以立即更新（host 模式）

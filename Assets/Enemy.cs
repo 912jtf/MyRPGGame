@@ -338,6 +338,15 @@ public class Enemy : MonoBehaviour
 
     void Update()
     {
+        // 对局结算后：立刻冻结敌人，避免继续攻击/偷矿/放技能等
+        if (PlayerHealth.MatchEndedGlobal)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            SetSkillCharging(false);
+            SetAnimState(idle: true, walk: false, attack: false);
+            return;
+        }
+
         ApplyNetRolePhysicsEveryFrame();
 
         // 连机一致性：敌人 AI / 移动 / 攻击只由服务器驱动
