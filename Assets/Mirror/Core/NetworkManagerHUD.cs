@@ -14,6 +14,27 @@ namespace Mirror
         public int offsetX;
         public int offsetY;
 
+        enum StartMode
+        {
+            None,
+            SingleHost,
+            DualAuto,            // user clicked "Dual Start": try client first, then auto-host if timeout
+            DualHostWaiting,
+            DualClientConnecting,
+            DualInGame
+        }
+
+        StartMode _mode;
+        float _dualStartClickedTime;
+
+        [Header("Easeplan HUD")]
+        [Tooltip("双人开始：先尝试作为 Client 连接；若超时未连上则自动开 Host 等待对方。")]
+        public bool dualAutoHostIfConnectFails = true;
+        [Min(0.2f)]
+        public float dualConnectTimeoutSeconds = 2.0f;
+        [Tooltip("双人开始：本地玩家在对方未加入前禁用操作脚本。")]
+        public bool lockLocalPlayerControlUntilBothReady = true;
+
         void Awake()
         {
             manager = GetComponent<NetworkManager>();
@@ -52,57 +73,81 @@ namespace Mirror
         {
             if (!NetworkClient.active)
             {
-#if UNITY_WEBGL
-                // cant be a server in webgl build
-                if (GUILayout.Button("Single Player"))
-                    manager.StartHost();
-#else
-                // Server + Client
-                if (GUILayout.Button("Host (Server + Client)"))
-                    manager.StartHost();
-#endif
+                GUILayout.Label("<b>启动方式</b>");
 
-                // Client + IP (+ PORT)
                 GUILayout.BeginHorizontal();
+                GUILayout.Label("地址", GUILayout.Width(40));
+                manager.networkAddress = GUILayout.TextField(manager.networkAddress, GUILayout.Width(170));
 
-                if (GUILayout.Button("Client"))
-                    manager.StartClient();
-
-                manager.networkAddress = GUILayout.TextField(manager.networkAddress);
-                // only show a port field if we have a port transport
-                // we can't have "IP:PORT" in the address field since this only
-                // works for IPV4:PORT.
-                // for IPV6:PORT it would be misleading since IPV6 contains ":":
-                // 2001:0db8:0000:0000:0000:ff00:0042:8329
                 if (Transport.active is PortTransport portTransport)
                 {
-                    // use TryParse in case someone tries to enter non-numeric characters
-                    if (ushort.TryParse(GUILayout.TextField(portTransport.Port.ToString()), out ushort port))
+                    GUILayout.Label("端口", GUILayout.Width(40));
+                    if (ushort.TryParse(GUILayout.TextField(portTransport.Port.ToString(), GUILayout.Width(70)), out ushort port))
                         portTransport.Port = port;
                 }
-
                 GUILayout.EndHorizontal();
 
-                // Server Only
-#if UNITY_WEBGL
-                // cant be a server in webgl build
-                GUILayout.Box("( WebGL cannot be Server Only)");
-#else
-                if (GUILayout.Button("Server Only"))
-                    manager.StartServer();
-#endif
+                GUILayout.Space(6);
+
+                if (GUILayout.Button("单人开始"))
+                {
+                    _mode = StartMode.SingleHost;
+                    manager.StartHost();
+                }
+
+                if (GUILayout.Button("双人开始"))
+                {
+                    _mode = StartMode.DualAuto;
+                    _dualStartClickedTime = Time.realtimeSinceStartup;
+                    manager.StartClient();
+                }
             }
             else
             {
                 // Connecting
-                GUILayout.Label($"Connecting to {manager.networkAddress}..");
-                if (GUILayout.Button("Cancel Connection Attempt"))
+                GUILayout.Label($"连接中: {manager.networkAddress}  via {Transport.active}");
+
+                // 双人开始：连接超时则自动开 Host
+                if (_mode == StartMode.DualAuto && dualAutoHostIfConnectFails)
+                {
+                    float elapsed = Time.realtimeSinceStartup - _dualStartClickedTime;
+                    float remain = Mathf.Max(0f, dualConnectTimeoutSeconds - elapsed);
+                    GUILayout.Label($"双人开始：正在尝试加入... ({remain:F1}s)");
+                    if (elapsed >= dualConnectTimeoutSeconds && !NetworkClient.isConnected)
+                    {
+                        manager.StopClient();
+                        _mode = StartMode.DualHostWaiting;
+                        manager.StartHost();
+                    }
+                }
+
+                if (GUILayout.Button("取消"))
+                {
+                    _mode = StartMode.None;
                     manager.StopClient();
+                }
             }
         }
 
         void StatusLabels()
         {
+            // Update mode transitions
+            if (_mode == StartMode.DualAuto)
+            {
+                if (NetworkClient.isConnected && !NetworkServer.active)
+                    _mode = StartMode.DualClientConnecting;
+                else if (NetworkServer.active && NetworkClient.active)
+                    _mode = StartMode.DualHostWaiting;
+            }
+
+            if ((_mode == StartMode.DualHostWaiting || _mode == StartMode.DualClientConnecting) && BothPlayersPresent())
+                _mode = StartMode.DualInGame;
+
+            if (lockLocalPlayerControlUntilBothReady && (_mode == StartMode.DualHostWaiting || _mode == StartMode.DualClientConnecting))
+                SetLocalPlayerControlEnabled(false);
+            if (lockLocalPlayerControlUntilBothReady && _mode == StartMode.DualInGame)
+                SetLocalPlayerControlEnabled(true);
+
             // host mode
             // display separately because this always confused people:
             //   Server: ...
@@ -110,7 +155,18 @@ namespace Mirror
             if (NetworkServer.active && NetworkClient.active)
             {
                 // host mode
-                GUILayout.Label($"<b>Host</b>: running via {Transport.active}");
+                GUILayout.Label($"<b>Host</b>（Server + Client）  via {Transport.active}");
+                GUILayout.Label($"地址: {manager.networkAddress}");
+                if (Transport.active is PortTransport portTransportHost)
+                    GUILayout.Label($"端口: {portTransportHost.Port}");
+
+                if (_mode == StartMode.DualHostWaiting)
+                {
+                    int connected = NetworkServer.connections != null ? NetworkServer.connections.Count : 0;
+                    GUILayout.Label($"双人开始：等待对方加入... ({connected}/2)");
+                    if (BothPlayersPresent())
+                        GUILayout.Label("对方已准备好，正在开始游戏...");
+                }
             }
             else if (NetworkServer.active)
             {
@@ -121,6 +177,64 @@ namespace Mirror
             {
                 // client only
                 GUILayout.Label($"<b>Client</b>: connected to {manager.networkAddress} via {Transport.active}");
+                if (_mode == StartMode.DualClientConnecting)
+                {
+                    GUILayout.Label("双人开始：已连接，等待对方准备...");
+                    if (BothPlayersPresent())
+                        GUILayout.Label("对方已准备好，正在开始游戏...");
+                }
+            }
+        }
+
+        bool BothPlayersPresent()
+        {
+            // Host: rely on connections count (includes local host connection)
+            if (NetworkServer.active)
+            {
+                int connected = NetworkServer.connections != null ? NetworkServer.connections.Count : 0;
+                return connected >= 2;
+            }
+
+            // Client only: count spawned NetworkIdentity with tag "Player".
+            // Avoid referencing project scripts here (Mirror assembly shouldn't depend on Assembly-CSharp).
+            int players = 0;
+            if (NetworkClient.active && NetworkClient.spawned != null)
+            {
+                foreach (var kv in NetworkClient.spawned)
+                {
+                    NetworkIdentity ni = kv.Value;
+                    if (ni == null) continue;
+                    if (ni.gameObject != null && ni.gameObject.CompareTag("Player"))
+                        players++;
+                }
+            }
+            return players >= 2;
+        }
+
+        void SetLocalPlayerControlEnabled(bool enabled)
+        {
+            if (!NetworkClient.active)
+                return;
+            if (NetworkClient.localPlayer == null)
+                return;
+
+            GameObject go = NetworkClient.localPlayer.gameObject;
+            if (go == null)
+                return;
+
+            // Don't touch colliders/rigidbody here; only gameplay scripts.
+            // Use type name matching to avoid hard dependency on project assemblies.
+            MonoBehaviour[] mbs = go.GetComponents<MonoBehaviour>();
+            if (mbs == null || mbs.Length == 0)
+                return;
+
+            for (int i = 0; i < mbs.Length; i++)
+            {
+                MonoBehaviour mb = mbs[i];
+                if (mb == null) continue;
+                string n = mb.GetType().Name;
+                if (n == "PlayerMovement" || n == "PlayerAttack" || n == "PlayerSkills" || n == "PlayerGoldCarrier")
+                    mb.enabled = enabled;
             }
         }
 
@@ -134,11 +248,11 @@ namespace Mirror
                     manager.StopHost();
 #else
                 // stop host if host mode
-                if (GUILayout.Button("Stop Host"))
+                if (GUILayout.Button("停止"))
                     manager.StopHost();
 
                 // stop client if host mode, leaving server up
-                if (GUILayout.Button("Stop Client"))
+                if (GUILayout.Button("断开客户端"))
                     manager.StopClient();
 #endif
                 GUILayout.EndHorizontal();
@@ -146,7 +260,7 @@ namespace Mirror
             else if (NetworkClient.isConnected)
             {
                 // stop client if client-only
-                if (GUILayout.Button("Stop Client"))
+                if (GUILayout.Button("断开"))
                     manager.StopClient();
             }
             else if (NetworkServer.active)
