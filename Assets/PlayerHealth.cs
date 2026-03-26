@@ -624,6 +624,31 @@ public class PlayerHealth : NetworkBehaviour
     void RestartGame()
     {
         Time.timeScale = 1f;
+
+        // 回到“单人开始 / 双人开始”选择界面：
+        // - 先停止网络（否则 NetworkManager DontDestroyOnLoad 仍保持连接，HUD 不会回到起始按钮状态）
+        // - 再重载场景以清理对局内对象/状态
+        if (NetworkClient.isConnected || NetworkClient.active || NetworkServer.active)
+        {
+            NetworkManager nm = NetworkManager.singleton;
+            if (nm != null)
+            {
+                if (NetworkServer.active && NetworkClient.isConnected)
+                    nm.StopHost();
+                else if (NetworkClient.isConnected || NetworkClient.active)
+                    nm.StopClient();
+                else if (NetworkServer.active)
+                    nm.StopServer();
+            }
+        }
+
+        // 清理静态对局控制器（避免重开后引用旧实例）
+        if (isServer)
+        {
+            s_serverMatchController = null;
+            s_serverMatchEndedGuard = false;
+        }
+
         Scene current = SceneManager.GetActiveScene();
         SceneManager.LoadScene(current.buildIndex);
     }
@@ -634,7 +659,28 @@ public class PlayerHealth : NetworkBehaviour
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else
+        // Build 中 Quit 卡死的常见原因：StopHost/StopClient/StopServer 在传输层关闭/线程 join 时阻塞主线程。
+        // 你的目标是“关闭窗口”，因此这里改为直接退出进程（并加短延迟兜底），不做优雅断开。
+        if (!_quitRequested)
+        {
+            _quitRequested = true;
+            StartCoroutine(CoQuitBuild());
+        }
+#endif
+    }
+
+    bool _quitRequested;
+
+    IEnumerator CoQuitBuild()
+    {
         Application.Quit();
+
+#if UNITY_STANDALONE
+        // 兜底：若窗口未关闭（某些平台/设置下 Application.Quit 延迟或无效），强制退出进程。
+        yield return new WaitForSecondsRealtime(0.5f);
+        System.Environment.Exit(0);
+#else
+        yield break;
 #endif
     }
 
